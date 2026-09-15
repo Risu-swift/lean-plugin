@@ -26,6 +26,7 @@ You are reviewing. Do not edit any files.
    - needless complexity
 5. **Output, 40 lines or less:**
    - one line per finding: `BLOCKER|MAJOR|MINOR  path:line — problem → suggested fix`
+   - `Notes:` the output of `zk lint`, one line per stale note (omit if ok)
    - then `Not checked:` followed by anything you skipped
    - no praise, and no summaries of what the code does
    - last line: `After fixes: lean reviewed HEAD`

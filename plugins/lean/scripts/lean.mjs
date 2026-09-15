@@ -2,6 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import {
   findRoot,
@@ -28,11 +29,17 @@ const HELP = `lean — project state and task cards
   lean next                                    ready cards
   lean new-id spec|task [--count n]            next S-/T- ids
   lean start T-NNN [T-NNN ...]                 mark cards doing (several for --parallel)
-  lean reset T-NNN [T-NNN ...]                 put cards back to todo (abandoned or failed)
+  lean reset T-NNN [T-NNN ...]                 put cards back to todo (abandoned or failed); an unmerged
+                                               worker branch is recorded on the card as branch:
   lean done T-NNN [--commit sha] [--notes id,id] [--no-tests "<why>"]
-                                               refuses unless the card's commits changed a test file
+                                               refuses unless the card's commits changed a test file;
+                                               removes merged worker worktrees and their branches
   lean check-parallel T-a T-b ...              deps done, no shared files
-  lean test [--fast] [--cmd "<command>"]       run tests, print only failures + summary
+  lean test [--fast] [--cmd "<command>"] [--force]
+                                               run tests, print only failures + summary; reuses a passing
+                                               run when no code changed since (--force reruns)
+  lean doctor [--fix]                          leftover worker worktrees and merged branches;
+                                               --fix removes merged/empty ones, keeps locked/dirty/unmerged
   lean audit [--no-npm]                        zero-token security scan: secrets, tracked key/env files,
                                                open rules, npm audit, sensitive files changed since last review
   lean secured [sha]                           record that a security review covered the code up to sha
@@ -44,7 +51,7 @@ const HELP = `lean — project state and task cards
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const [cmd, ...rest] = process.argv.slice(2);
-const { pos, opt } = parseArgs(rest, ['all', 'fast', 'stop', 'no-open', 'no-npm']);
+const { pos, opt } = parseArgs(rest, ['all', 'fast', 'stop', 'no-open', 'no-npm', 'force', 'fix']);
 const die = (m) => {
   console.error(`lean: ${m}`);
   process.exit(1);
@@ -132,6 +139,80 @@ function openBrowser(url) {
   } catch {}
 }
 
+const gitC = (dir, args) => git(`-C "${dir}" ${args}`);
+const splitLines = (s) => (s || '').split(/\r?\n/).filter(Boolean);
+
+// The code under test: HEAD plus uncommitted changes. .lean/ bookkeeping and worker worktrees don't count.
+function treeFingerprint(r) {
+  const head = gitC(r, 'rev-parse HEAD');
+  const skip = '":(exclude).lean" ":(exclude).claude/worktrees"';
+  const diff = head && gitC(r, `diff HEAD --binary -- . ${skip}`);
+  const untracked = head && gitC(r, `ls-files --others --exclude-standard -- . ${skip}`);
+  if (diff == null || untracked == null) return null; // no commits yet, or output too big to fingerprint
+  const hash = crypto.createHash('sha1').update(head).update(diff);
+  for (const f of splitLines(untracked)) {
+    hash.update(f);
+    try {
+      hash.update(fs.readFileSync(path.join(r, f)));
+    } catch {}
+  }
+  return hash.digest('hex');
+}
+
+// ---- worker worktrees (isolation: worktree puts them under .claude/worktrees/) ----
+function workerWorktrees(r) {
+  const mainLine = new Set(splitLines(gitC(r, 'rev-list --first-parent HEAD')));
+  return (gitC(r, 'worktree list --porcelain') || '')
+    .split(/\r?\n\r?\n/)
+    .map((block) =>
+      Object.fromEntries(
+        splitLines(block).map((l) => {
+          const i = l.indexOf(' ');
+          return i < 0 ? [l, true] : [l.slice(0, i), l.slice(i + 1)];
+        })
+      )
+    )
+    .filter((w) => w.worktree && w.HEAD && norm(w.worktree).includes('/.claude/worktrees/'))
+    .map((w) => {
+      const missing = !fs.existsSync(w.worktree);
+      const status = missing ? null : gitC(w.worktree, 'status --porcelain');
+      return {
+        path: w.worktree,
+        branch: typeof w.branch === 'string' ? w.branch.replace(/^refs\/heads\//, '') : null,
+        sha: w.HEAD,
+        missing,
+        locked: 'locked' in w,
+        dirty: status === null || status.length > 0,
+        merged: gitC(r, `merge-base --is-ancestor ${w.HEAD} HEAD`) !== null,
+        // A fresh worktree sits on a main-line commit; worker commits only reach main through --no-ff merges.
+        own: !mainLine.has(w.HEAD),
+      };
+    });
+}
+
+const WORKTREE_STATES = {
+  missing: 'folder is gone',
+  locked: 'locked, an agent may still be using it',
+  dirty: 'uncommitted changes',
+  empty: 'no commits of its own',
+  merged: 'merged, safe to remove',
+  unmerged: 'unmerged commits',
+};
+
+function worktreeState(w) {
+  if (w.missing) return 'missing';
+  if (w.locked) return 'locked';
+  if (w.dirty) return 'dirty';
+  if (!w.own) return 'empty';
+  return w.merged ? 'merged' : 'unmerged';
+}
+
+function removeWorktree(r, w) {
+  if (gitC(r, `worktree remove "${w.path}"`) === null) return false;
+  if (w.branch) gitC(r, `branch -d "${w.branch}"`);
+  return true;
+}
+
 switch (cmd) {
   case 'init': {
     const r = git('rev-parse --show-toplevel') || process.cwd();
@@ -211,15 +292,26 @@ switch (cmd) {
     const r = need();
     if (!pos.length) die(`usage: lean ${cmd} T-NNN [T-NNN ...]`);
     const status = cmd === 'start' ? 'doing' : 'todo';
+    const unmerged = cmd === 'reset' ? workerWorktrees(r).filter((w) => w.branch && w.own && !w.merged) : [];
+    const kept = [];
     const changed = pos.map((id) => {
       const c = card(r, id);
       if (c.done) die(`${c.id} is already done`);
       c.data.status = status;
+      // Unmerged worker work stays on its branch; /lean:do step 2 salvages it via `branch:`.
+      const w = unmerged.find((x) =>
+        splitLines(gitC(r, `log --format=%s HEAD..${x.branch}`)).some((s) => s.startsWith(`${c.id}:`))
+      );
+      if (w) {
+        c.data.branch = w.branch;
+        kept.push(`${c.id} → ${w.branch}`);
+      }
       saveCard(c);
       return c;
     });
     writeState(r);
     console.log(`${cmd === 'start' ? 'started' : 'reset to todo'}: ${changed.map((c) => c.id).join(', ')}`);
+    if (kept.length) console.log(`unmerged work kept on its branch (recorded as branch: on the card): ${kept.join(', ')}`);
 
     const deployCards = cmd === 'start' ? changed.filter((c) => String(c.data.deploy) === 'true') : [];
     if (deployCards.length) {
@@ -264,6 +356,13 @@ switch (cmd) {
     });
     const next = readyCards(loadCards(r)).map((n) => n.id);
     console.log(`done ${c.id}. ready: ${next.join(', ') || 'none'}`);
+
+    const removed = [];
+    for (const w of workerWorktrees(r).filter((x) => worktreeState(x) === 'merged')) {
+      if (removeWorktree(r, w)) removed.push(w.branch || path.basename(w.path));
+      else console.log(`could not remove worktree ${w.path} (see lean doctor)`);
+    }
+    if (removed.length) console.log(`removed merged worker worktrees: ${removed.join(', ')}`);
     break;
   }
 
@@ -304,6 +403,21 @@ switch (cmd) {
     const cfg = configOf(r);
     const command = opt.cmd || (opt.fast ? cfg.testFast : cfg.test);
     if (!command) die('no test command — set "test" in .lean/config.json or pass --cmd "<command>"');
+
+    const lastPath = path.join(r, '.lean', 'last-test.json');
+    const last = readJson(lastPath, {});
+    const passes = last.passes || {};
+    const tree = treeFingerprint(r);
+    // A passing full suite also covers the fast subset.
+    const covering = [command, ...(opt.fast && !opt.cmd && cfg.test ? [cfg.test] : [])];
+    const cached = !opt.force && tree && covering.map((c) => passes[c]).find((p) => p?.tree === tree);
+    if (cached) {
+      const at = new Date(cached.at).toLocaleString('sv-SE');
+      console.log(`PASS (cached: no code changes since it passed at ${at}, saved ~${cached.secs}s) ${command}`);
+      console.log('rerun anyway: lean test --force');
+      break;
+    }
+
     const started = Date.now();
     const run = spawnSync(command, { cwd: r, shell: true, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
     const secs = Math.round((Date.now() - started) / 1000);
@@ -330,14 +444,10 @@ switch (cmd) {
     }
 
     const doing = loadCards(r).find((c) => !c.done && c.data.status === 'doing');
-    writeJson(path.join(r, '.lean', 'last-test.json'), {
-      ok,
-      exit: run.status,
-      secs,
-      cmd: command,
-      card: doing?.id || null,
-      at: new Date().toISOString(),
-    });
+    const at = new Date().toISOString();
+    if (ok && tree) passes[command] = { tree, at, secs };
+    else delete passes[command];
+    writeJson(lastPath, { ok, exit: run.status, secs, cmd: command, card: doing?.id || null, at, passes });
     console.log(`${ok ? 'PASS' : 'FAIL'} (${secs}s, exit ${run.status}) ${command}`);
     if (run.error) console.log(`spawn error: ${run.error.message}`);
     shown.forEach((l) => console.log(l));
@@ -448,6 +558,42 @@ switch (cmd) {
       [...info.values()].slice(0, 5).forEach((l) => console.log(`  ${l}`));
     }
     process.exitCode = findings.some((x) => x.sev === 'BLOCKER') ? 2 : 0;
+    break;
+  }
+
+  case 'doctor': {
+    const r = need();
+    const trees = workerWorktrees(r);
+    const checkedOut = new Set(trees.map((w) => w.branch));
+    const current = gitC(r, 'branch --show-current');
+    const mergedBranches = splitLines(gitC(r, 'for-each-ref --format="%(refname:short)" --merged HEAD refs/heads')).filter(
+      (b) => b !== current && !checkedOut.has(b)
+    );
+
+    console.log(`Worker worktrees: ${trees.length || 'none'}`);
+    for (const w of trees) {
+      const s = worktreeState(w);
+      const subject = w.own && !w.missing ? ` · ${gitC(r, `log -1 --format=%s ${w.sha}`)}` : '';
+      console.log(`  ${s.padEnd(8)} ${w.branch || w.sha.slice(0, 7)}${subject} (${WORKTREE_STATES[s]})`);
+    }
+    console.log(`Merged branches: ${mergedBranches.join(', ') || 'none'}`);
+
+    const removable = trees.filter((w) => ['merged', 'empty'].includes(worktreeState(w)));
+    const missing = trees.some((w) => w.missing);
+    if (!opt.fix) {
+      console.log(
+        removable.length || mergedBranches.length || missing
+          ? `Fix: lean doctor --fix removes ${removable.length} worktree(s) and deletes ${mergedBranches.length} merged branch(es)` +
+              `${missing ? ', and prunes missing worktrees' : ''}. Locked, dirty and unmerged worktrees are kept.`
+          : 'Nothing to clean.'
+      );
+      break;
+    }
+    if (missing) gitC(r, 'worktree prune');
+    for (const w of removable) console.log(removeWorktree(r, w) ? `removed ${w.path}` : `could not remove ${w.path}`);
+    for (const b of mergedBranches) {
+      console.log(gitC(r, `branch -d "${b}"`) !== null ? `deleted branch ${b}` : `could not delete branch ${b}`);
+    }
     break;
   }
 

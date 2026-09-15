@@ -24,7 +24,7 @@ Args: $ARGUMENTS
    - `tdd: after`: implement, then add tests covering the "Done when" items.
    - Stay inside `files:`. If the card turns out wrong or bigger than planned, stop and ask with AskUserQuestion. Don't quietly expand scope.
    - After 2 failed fix attempts on the same problem, switch to the `/lean:debug` method: reproduce, then test one hypothesis at a time.
-6. Verify before claiming done. Run `lean test`, which runs the full suite from config and prints only failures plus a summary. Use `lean test --fast` for quick loops, or `lean test --cmd "<narrow command>"` to trim any other test command. Check each "Done when" item against the real output. Never say "should pass".
+6. Verify before claiming done. Run `lean test`, which runs the full suite from config and prints only failures plus a summary. Use `lean test --fast` for quick loops, or `lean test --cmd "<narrow command>"` to trim any other test command. If no code changed since a passing run, it reports the cached pass instantly; use `--force` only when something outside git changed (env, emulators). Check each "Done when" item against the real output. Never say "should pass".
 7. Commit only the card's files plus `.lean/` changes: `git commit -m "T-NNN: <title>"`.
 8. Compound, 0–3 notes. Record only learnings that would change what someone does next time: surprising behavior, a constraint, a pattern worth repeating.
    - Run `zk find` first. If a similar note exists, Edit that file instead of creating a duplicate.
@@ -43,6 +43,6 @@ Args: $ARGUMENTS
    - `parallel.setup` and `parallel.portEnv` from the config
    - the `test` command
 4. Workers don't touch STATE, card status or zk. Each one returns its branch, commit sha, test result and proposed notes.
-5. When all workers have returned, merge them one at a time with `git merge --no-ff <branch>`, and run `lean test` after each merge. If there's a conflict or tests fail, fix it if it's trivial; otherwise stop and ask. If a worker failed, or you decide not to merge its branch, run `lean reset T-x` so that card goes back to Ready.
-6. For each card: write its proposed notes (step 8 above), then run `lean done`. Delete merged worker branches.
+5. When all workers have returned, merge them one at a time with `git merge --no-ff <branch>`, and run `lean test --fast` after each merge. After the last merge, run the full `lean test` once. If there's a conflict or tests fail, fix it if it's trivial; otherwise stop and ask. If a worker failed, or you decide not to merge its branch, run `lean reset T-x`: the card goes back to Ready with its unmerged branch recorded as `branch:`.
+6. For each card: write its proposed notes (step 8 above), then run `lean done`. It removes merged worker worktrees and their branches; if it reports one it couldn't remove, run `lean doctor`.
 7. Report one line per card.

@@ -16,6 +16,7 @@ Inspired by Every's Compound Engineering and stored as Zettelkasten notes. Work 
 3. **For each one:**
    - Run `zk find <2-3 words>`, which searches both the project and global vaults.
    - If a similar note exists, Edit that file (sharpen the claim, add a case, add a tag) instead of creating a new note.
+   - If an existing note is now wrong (a reversed decision, a fixed gotcha), write the new note, then run `zk supersede <old> <new>` so search stops returning the old one.
    - Otherwise run `zk new --type decision|gotcha|pattern|fact --title "<the claim as a sentence>" --tags <up to 4, kebab-case> --links <related ids> --source "<T-id, S-id or commit>" --body "Why: ...\nApply: ..."`.
    - If it isn't project-specific (Firebase, Node, Windows, git, test tools...), add `--global`.
 4. **Note rules.**
