@@ -1,14 +1,29 @@
 #!/usr/bin/env node
 import fs from 'node:fs';
 import path from 'node:path';
-import { findRoot, git, globalHome, parseArgs, list, loadNotes, serialize, today } from './lib.mjs';
+import {
+  findRoot,
+  git,
+  globalHome,
+  parseArgs,
+  list,
+  loadNotes,
+  searchNotes,
+  similarNote,
+  noteLine,
+  applyLine,
+  serialize,
+  today,
+} from './lib.mjs';
 
 const HELP = `zk — Zettelkasten notes (project .lean/zk + global ~/.lean/zk)
 
-  zk find <words> [--type t] [--tag t] [--deep] [--all] [--project|--global] [--limit n]
+  zk find <words> [--type t] [--tag t] [--all] [--project|--global] [--limit n]
+                                     top 5 ranked matches, each with its Apply line
   zk show <id> [...]                 print notes (id prefix ok)
   zk new --type decision|gotcha|pattern|fact --title "<claim>"
-         [--tags a,b] [--links id,id] [--source T-003] [--body "Why: ...\\nApply: ..."] [--global]
+         [--tags a,b] [--links id,id] [--source T-003] [--body "Why: ...\\nApply: ..."] [--global] [--force]
+                                     refuses when a similar note exists (prints its file); --force creates anyway
   zk link <id> <id>                  two-way link
   zk supersede <old-id> <new-id>     mark a note replaced; find and ls hide it (--all shows it)
   zk lint                            dangling links, project notes citing files that no longer exist
@@ -17,7 +32,7 @@ const HELP = `zk — Zettelkasten notes (project .lean/zk + global ~/.lean/zk)
 
 const TYPES = ['decision', 'gotcha', 'pattern', 'fact'];
 const [cmd, ...rest] = process.argv.slice(2);
-const { pos, opt } = parseArgs(rest, ['global', 'project', 'deep', 'all']);
+const { pos, opt } = parseArgs(rest, ['global', 'project', 'deep', 'all', 'force']);
 const die = (m) => {
   console.error(`zk: ${m}`);
   process.exit(1);
@@ -38,12 +53,11 @@ function loadAll() {
 
 const current = (notes) => (opt.all ? notes : notes.filter((n) => !n.data.superseded_by));
 
-const fmt = (n) => {
-  const tags = list(n.data.tags);
-  return `${n.scope} ${n.id} ${String(n.data.type || '?').padEnd(8)} ${n.data.title || ''}${
-    tags.length ? '  ' + tags.map((t) => '#' + t).join(' ') : ''
-  }${n.data.superseded_by ? `  (superseded by ${n.data.superseded_by})` : ''}`;
-};
+function printNote(n) {
+  console.log(noteLine(n));
+  const apply = applyLine(n);
+  if (apply) console.log(`    ${apply}`);
+}
 
 function stamp() {
   const d = new Date();
@@ -73,7 +87,7 @@ const rel = (f) => {
   const r = path.relative(process.cwd(), f);
   return r && !r.startsWith('..') ? r : f;
 };
-const limit = () => parseInt(opt.limit || '20', 10);
+const limit = (fallback) => parseInt(opt.limit || String(fallback), 10);
 
 switch (cmd) {
   case 'new': {
@@ -84,6 +98,17 @@ switch (cmd) {
     fs.mkdirSync(v.dir, { recursive: true });
     opt.global = opt.project = false;
     const all = loadAll();
+
+    const similar = !opt.force && similarNote(current(all), { title: opt.title, tags: opt.tags, body: opt.body });
+    if (similar) {
+      console.log(`similar note exists (${Math.round(similar.sim * 100)}% overlap), nothing created:`);
+      printNote(similar.n);
+      console.log(`    file: ${rel(similar.n.file)}`);
+      console.log('Edit that file to sharpen it. If your note replaces it, rerun with --force, then zk supersede <old> <new>.');
+      process.exitCode = 2;
+      break;
+    }
+
     const base = stamp();
     let id = base;
     for (let i = 2; all.some((n) => n.id === id); i++) id = `${base}-${i}`;
@@ -111,25 +136,12 @@ switch (cmd) {
 
   case 'find':
   case 'f': {
-    const terms = pos.map((t) => t.toLowerCase());
     let notes = current(loadAll());
     if (opt.type) notes = notes.filter((n) => n.data.type === opt.type);
     if (opt.tag) notes = notes.filter((n) => list(n.data.tags).includes(opt.tag.toLowerCase()));
-    const scored = notes
-      .map((n) => {
-        const hay = [n.data.title, list(n.data.tags).join(' '), n.data.type, n.data.source, opt.deep ? n.body : '']
-          .join(' ')
-          .toLowerCase();
-        return { n, score: terms.length ? terms.filter((t) => hay.includes(t)).length : 1 };
-      })
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score || b.n.id.localeCompare(a.n.id));
-    if (!scored.length) {
-      console.log(`no matches${opt.deep ? '' : ' (try fewer words or --deep)'}`);
-      break;
-    }
-    scored.slice(0, limit()).forEach((x) => console.log(fmt(x.n)));
-    if (scored.length > limit()) console.log(`… ${scored.length - limit()} more (--limit)`);
+    const hits = pos.length ? searchNotes(notes, pos.join(' '), limit(5)) : notes.slice(0, limit(20));
+    if (!hits.length) console.log('no matches (try other words, or zk tags)');
+    hits.forEach(printNote);
     break;
   }
 
@@ -201,9 +213,9 @@ switch (cmd) {
   case 'ls':
   case 'index': {
     const notes = current(loadAll());
-    notes.slice(0, limit()).forEach((n) => console.log(fmt(n)));
+    notes.slice(0, limit(20)).forEach((n) => console.log(noteLine(n)));
     if (!notes.length) console.log('no notes yet');
-    else if (notes.length > limit()) console.log(`… ${notes.length - limit()} more (--limit)`);
+    else if (notes.length > limit(20)) console.log(`… ${notes.length - limit(20)} more (--limit)`);
     break;
   }
 

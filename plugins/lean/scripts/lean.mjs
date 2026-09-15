@@ -19,6 +19,10 @@ import {
   writeState,
   today,
   buildReport,
+  loadNotes,
+  searchNotes,
+  noteLine,
+  applyLine,
 } from './lib.mjs';
 
 const HELP = `lean — project state and task cards
@@ -28,7 +32,9 @@ const HELP = `lean — project state and task cards
   lean tasks [--all]                           open cards: READY / wait / doing
   lean next                                    ready cards
   lean new-id spec|task [--count n]            next S-/T- ids
-  lean start T-NNN [T-NNN ...]                 mark cards doing (several for --parallel)
+  lean start T-NNN [T-NNN ...]                 mark cards doing (several for --parallel); one card also
+                                               prints its top related notes
+  lean notes T-NNN                             top related notes for a card (read-only; used by workers)
   lean reset T-NNN [T-NNN ...]                 put cards back to todo (abandoned or failed); an unmerged
                                                worker branch is recorded on the card as branch:
   lean done T-NNN [--commit sha] [--notes id,id] [--no-tests "<why>"]
@@ -213,6 +219,28 @@ function removeWorktree(r, w) {
   return true;
 }
 
+// Notes worth reading before a card, beyond the ones its Watch section already cites.
+function cardNotes(r, c, max = 3) {
+  const cited = new Set(String(c.body).match(/\b\d{8}-\d{6}(?:-\d+)?\b/g) || []);
+  const notes = loadNotes(r).filter((n) => !n.data.superseded_by && !cited.has(n.id));
+  const files = list(c.data.files).map((f) => f.replace(/\.[^./]+$/, '').replace(/\b(src|lib|index|__tests__)\b/g, ' '));
+  return searchNotes(notes, [c.data.title, ...files].join(' '), max);
+}
+
+function printCardNotes(r, c, { quiet = false } = {}) {
+  const notes = cardNotes(r, c);
+  if (!notes.length) {
+    if (!quiet) console.log(`no related notes for ${c.id}`);
+    return;
+  }
+  console.log(`notes for ${c.id} (beyond its Watch list):`);
+  for (const n of notes) {
+    console.log(`  ${noteLine(n)}`);
+    const apply = applyLine(n);
+    if (apply) console.log(`      ${apply}`);
+  }
+}
+
 switch (cmd) {
   case 'init': {
     const r = git('rev-parse --show-toplevel') || process.cwd();
@@ -312,6 +340,8 @@ switch (cmd) {
     writeState(r);
     console.log(`${cmd === 'start' ? 'started' : 'reset to todo'}: ${changed.map((c) => c.id).join(', ')}`);
     if (kept.length) console.log(`unmerged work kept on its branch (recorded as branch: on the card): ${kept.join(', ')}`);
+    // Parallel workers look up their own notes with `lean notes`.
+    if (cmd === 'start' && changed.length === 1) printCardNotes(r, changed[0], { quiet: true });
 
     const deployCards = cmd === 'start' ? changed.filter((c) => String(c.data.deploy) === 'true') : [];
     if (deployCards.length) {
@@ -558,6 +588,12 @@ switch (cmd) {
       [...info.values()].slice(0, 5).forEach((l) => console.log(`  ${l}`));
     }
     process.exitCode = findings.some((x) => x.sev === 'BLOCKER') ? 2 : 0;
+    break;
+  }
+
+  case 'notes': {
+    const r = need();
+    printCardNotes(r, card(r, pos[0]));
     break;
   }
 

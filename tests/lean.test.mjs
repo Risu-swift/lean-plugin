@@ -152,6 +152,32 @@ test('doctor reports worktrees, and --fix removes only merged and empty ones plu
   assert.match(p.lean('doctor').out, /Nothing to clean/);
 });
 
+test('start prints the notes most related to a single card, skipping ones its Watch list cites', (t) => {
+  const p = project(t);
+  const cited = p
+    .zk('new', '--type', 'gotcha', '--title', 'Close transaction must re-read the pitch state', '--body', 'Apply: read inside the transaction')
+    .out.match(/created P (\S+)/)[1];
+  p.zk('new', '--type', 'pattern', '--title', 'Vote close retries on transaction contention', '--tags', 'close-race', '--body', 'Apply: retry 5 times with jitter', '--force');
+  p.zk('new', '--type', 'fact', '--title', 'Weekly client report is sent on Fridays');
+  p.card('T-001', {
+    title: 'Votes never get lost when voting closes',
+    files: ['functions/src/closeTransaction.ts'],
+    body: `## Watch\n- re-read state (zk ${cited})`,
+  });
+
+  const r = p.lean('start', 'T-001');
+  assert.match(r.out, /notes for T-001/);
+  assert.match(r.out, /Vote close retries on transaction contention/);
+  assert.match(r.out, /Apply: retry 5 times with jitter/);
+  assert.doesNotMatch(r.out, /must re-read the pitch state/, 'already cited in the card');
+  assert.doesNotMatch(r.out, /Weekly client report/);
+  assert.match(p.lean('notes', 'T-001').out, /Vote close retries/);
+
+  p.card('T-002');
+  p.card('T-003');
+  assert.doesNotMatch(p.lean('start', 'T-002', 'T-003').out, /notes for/, 'parallel workers look up their own notes');
+});
+
 test('reset puts the card back to todo and records its unmerged worker branch', (t) => {
   const p = project(t);
   p.card('T-002', { status: 'doing' });

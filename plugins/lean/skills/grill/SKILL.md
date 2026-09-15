@@ -50,6 +50,6 @@ Ask one AskUserQuestion: summarize the settled design in 8 lines or less, with t
   ## Risks
   ```
 
-- For each decision that is non-obvious or costly to reverse, run `zk new --type decision --title "<the decision as a claim>" --tags a,b --source S-NNN --body "Why: ...\nApply: ..."`. Put the note id next to the decision in the spec. Aim for 2–8 notes, not one per question. When a decision reverses an earlier decision note, run `zk supersede <old> <new>`.
+- For each decision that is non-obvious or costly to reverse, run `zk new --type decision --title "<the decision as a claim>" --tags a,b --source S-NNN --body "Why: ...\nApply: ..."`. Put the note id next to the decision in the spec. Aim for 2–8 notes, not one per question. If `zk new` prints `similar note exists`, cite that note's id instead of creating one; when the decision reverses it, rerun with `--force`, then `zk supersede <old> <new>`.
 - Run `lean focus "S-NNN agreed, next: /lean:plan S-NNN"`. This is a temporary note; the focus line itself updates automatically from the cards.
 - Report in 3 lines: the spec path, the notes created, and the next step `/lean:plan S-NNN`.

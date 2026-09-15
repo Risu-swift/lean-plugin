@@ -33,7 +33,7 @@ It shows project, git branch, current card, done/total, ready count, blockers, m
 
 CLIs on the Bash PATH:
 - `lean status|tasks|next|start|reset|done|check-parallel|new-id|test|doctor|audit|secured|report|ui|focus|block|reviewed`
-  - `lean start T-a T-b ...` marks several cards as in progress (used by `--parallel`); `lean reset T-x` puts an abandoned card back to Ready and records an unmerged worker branch as `branch:`
+  - `lean start T-x` also prints the card's top 3 related notes beyond its Watch list (`lean notes T-x` prints them any time); `lean start T-a T-b ...` marks several cards as in progress (used by `--parallel`); `lean reset T-x` puts an abandoned card back to Ready and records an unmerged worker branch as `branch:`
   - `lean done` refuses unless the card's commits changed a test file. Use `--no-tests "<why>"` when tests truly aren't possible; `HUMAN:` cards are exempt. It also removes merged worker worktrees and their branches.
   - `lean doctor [--fix]` lists leftover worker worktrees (merged, empty, unmerged, dirty, locked) and merged branches; `--fix` removes only merged and empty worktrees and merged branches
   - The focus line is computed from the cards (active spec, progress, now/next). `lean focus "<note>"` pins a temporary note that clears at the next `lean done`.
@@ -43,6 +43,8 @@ Recommended user setting for `--parallel`: `"worktree": { "baseRef": "head" }`. 
   - `lean report --out docs/reports/<date>.md`: markdown progress report for clients
   - `lean ui`: read-only local dashboard at http://127.0.0.1:4777 with four views: board, notes search, notes graph, specs with acceptance coverage and the report. It updates live, and `lean ui --stop` stops it (it also stops itself after an hour idle).
 - `zk find|show|new|link|supersede|lint|ls|tags`
+  - `zk find <words>` returns the top 5 ranked notes, each with its `Apply:` line, so `zk show` is rarely needed. Ranking uses whole words and word starts (not substrings), splits camelCase identifiers, weights title over tags over body, and favors rare words
+  - `zk new` refuses when a similar note already exists and prints its file to edit; `--force` creates it anyway
   - `zk supersede <old> <new>` marks a note replaced; `find` and `ls` hide it unless `--all`
   - `zk lint` flags dangling links and project notes that cite files no longer in the repo
 

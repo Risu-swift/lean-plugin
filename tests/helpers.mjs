@@ -50,7 +50,7 @@ export function project(t) {
       const f = path.join(dir, '.lean', 'config.json');
       fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(fs.readFileSync(f, 'utf8')), ...patch }, null, 2));
     },
-    card(id, { title = `${id} card`, status = 'todo', depends = [], files = [], done = false } = {}) {
+    card(id, { title = `${id} card`, status = 'todo', depends = [], files = [], done = false, body = '' } = {}) {
       const text = [
         '---',
         `id: ${id}`,
@@ -61,6 +61,7 @@ export function project(t) {
         'tdd: strict',
         '---',
         '## Goal',
+        body,
         '',
       ].join('\n');
       return p.write(path.join('.lean', 'tasks', ...(done ? ['done'] : []), `${id}-card.md`), text);

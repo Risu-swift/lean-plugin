@@ -9,7 +9,7 @@ isolation: worktree
 You execute exactly one task card in your own git worktree. Your prompt gives you: the card path, a slot number N, a setup command, a port env variable name, and the test command.
 
 1. **Setup.** Run the setup command if one is given (e.g. `npm ci`). If a port env name is given, set it to N×100 on every test command (e.g. `LEAN_PORT_OFFSET=200 npm test`) so your emulators don't collide with other workers.
-2. **Read** the card, then run `zk find <area words>` to check for gotchas.
+2. **Read** the card, then run `lean notes T-NNN` for related gotchas beyond its Watch list (read-only).
 3. **Build** as the card says:
    - `tdd: strict`: write a failing test first, then the minimum code to make it pass.
    - `tdd: after`: implement, then write the tests.

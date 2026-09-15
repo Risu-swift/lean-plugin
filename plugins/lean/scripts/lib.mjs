@@ -193,6 +193,121 @@ export function loadNotes(root) {
   return notes.sort((a, b) => b.id.localeCompare(a.id));
 }
 
+// ---- note search: plain term matching, zero tokens ----
+const STOP = new Set(
+  'a all an and any are as at be but by can for from has have in into is it its no not of on one only or so than that the then this to via was when with'.split(
+    ' '
+  )
+);
+
+// Words of a text. camelCase identifiers also yield their parts: closeTransaction → closetransaction, close, transaction.
+export function terms(text) {
+  const out = new Set();
+  const s = String(text ?? '');
+  for (const src of [s, s.replace(/([a-z0-9])([A-Z])/g, '$1 $2')]) {
+    for (const w of src.toLowerCase().split(/[^a-z0-9]+/)) if (w.length > 1 && !STOP.has(w)) out.add(w);
+  }
+  return out;
+}
+
+// 1 for the same word, 0.6 when one is a prefix of the other (judge/judges, test/testing), else 0.
+const wordMatch = (q, k) => (q === k ? 1 : q.length >= 4 && k.length >= 4 && (k.startsWith(q) || q.startsWith(k)) ? 0.6 : 0);
+
+function bestMatch(set, q) {
+  let m = 0;
+  for (const k of set) {
+    const x = wordMatch(q, k);
+    if (x > m && (m = x) === 1) break;
+  }
+  return m;
+}
+
+const noteTerms = (n) =>
+  (n._terms ||= {
+    title: terms(n.data.title),
+    tags: terms(list(n.data.tags).join(' ')),
+    body: terms(`${n.body} ${n.data.source || ''}`),
+  });
+
+const anyField = (n, q) => {
+  const t = noteTerms(n);
+  return Math.max(bestMatch(t.title, q), bestMatch(t.tags, q), bestMatch(t.body, q));
+};
+
+// Inverse document frequency: a word found in few notes weighs more than one found in many.
+function idfOver(notes) {
+  const cache = new Map();
+  return (q) => {
+    if (!cache.has(q)) {
+      const df = notes.filter((n) => anyField(n, q) > 0).length;
+      cache.set(q, Math.log(1 + (notes.length - df + 0.5) / (df + 0.5)));
+    }
+    return cache.get(q);
+  };
+}
+
+// Ranked search: title matches beat tags beat body, rare words beat common ones, weak hits are dropped.
+export function searchNotes(notes, query, limit = 5) {
+  const words = [...terms(query)];
+  if (!words.length) return [];
+  const idf = idfOver(notes);
+  const ranked = notes
+    .map((n) => {
+      const t = noteTerms(n);
+      const score = words.reduce(
+        (s, w) => s + idf(w) * Math.max(3 * bestMatch(t.title, w), 2 * bestMatch(t.tags, w), bestMatch(t.body, w)),
+        0
+      );
+      return { n, score };
+    })
+    .filter((x) => x.score > 0)
+    .sort((a, b) => b.score - a.score || b.n.id.localeCompare(a.n.id));
+  const floor = (ranked[0]?.score || 0) * 0.4;
+  return ranked
+    .filter((x) => x.score >= floor)
+    .slice(0, limit)
+    .map((x) => x.n);
+}
+
+// Tuned on SharkTank's 77 notes: 0.6 refused 7 related-but-distinct notes; 0.68 flags only the true overlap.
+export const SIMILAR = 0.68;
+
+// The existing note closest to a draft, when the two overlap enough to be the same claim.
+// Similarity averages how much of the draft's title the note covers and how much of the note's title the draft covers.
+export function similarNote(notes, draft) {
+  const idf = idfOver(notes);
+  const draftTitle = [...terms(draft.title)];
+  const draftAll = terms(`${draft.title} ${list(draft.tags).join(' ')} ${draft.body || ''}`);
+  const cover = (words, has) => {
+    const total = words.reduce((s, w) => s + idf(w), 0);
+    return total ? words.reduce((s, w) => s + idf(w) * has(w), 0) / total : 0;
+  };
+  let best = null;
+  for (const n of notes) {
+    const sim =
+      (cover(draftTitle, (w) => anyField(n, w)) + cover([...noteTerms(n).title], (w) => bestMatch(draftAll, w))) / 2;
+    if (sim >= SIMILAR && (!best || sim > best.sim)) best = { n, sim };
+  }
+  return best;
+}
+
+export const noteLine = (n) => {
+  const tags = list(n.data.tags);
+  return `${n.scope} ${n.id} ${String(n.data.type || '?').padEnd(8)} ${n.data.title || ''}${
+    tags.length ? '  ' + tags.map((t) => '#' + t).join(' ') : ''
+  }${n.data.superseded_by ? `  (superseded by ${n.data.superseded_by})` : ''}`;
+};
+
+// The line that says what to do: Apply, else Fix, else the first body line.
+export function applyLine(n, max = 160) {
+  const lines = String(n.body || '')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+  const line = lines.find((l) => /^apply:/i.test(l)) || lines.find((l) => /^fix:/i.test(l)) || lines[0] || '';
+  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
+}
+
 export function loadSpecs(root) {
   const dir = path.join(root, '.lean', 'specs');
   if (!fs.existsSync(dir)) return [];
