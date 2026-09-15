@@ -1,0 +1,14 @@
+{
+  "name": "lean-local",
+  "owner": {
+    "name": "mediaPro"
+  },
+  "plugins": [
+    {
+      "name": "lean",
+      "source": "./plugins/lean",
+      "description": "Token-lean workflow: grill → plan → do → compound, with Zettelkasten memory and no background LLM calls.",
+      "version": "0.5.0"
+    }
+  ]
+}

@@ -1,0 +1,17 @@
+{
+  "description": "lean: inject compact project state at session start (no LLM calls)",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/scripts/state.mjs\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

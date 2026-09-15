@@ -1,0 +1,9 @@
+{
+  "name": "lean",
+  "version": "0.5.0",
+  "description": "Token-lean workflow: grill → plan → do → compound, with Zettelkasten memory and no background LLM calls.",
+  "author": {
+    "name": "mediaPro"
+  },
+  "keywords": ["workflow", "planning", "tdd", "zettelkasten", "memory"]
+}
