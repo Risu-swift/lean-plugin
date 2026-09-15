@@ -23,6 +23,7 @@ import {
   searchNotes,
   noteLine,
   applyLine,
+  loadSpecs,
 } from './lib.mjs';
 
 const HELP = `lean — project state and task cards
@@ -38,9 +39,12 @@ const HELP = `lean — project state and task cards
   lean reset T-NNN [T-NNN ...]                 put cards back to todo (abandoned or failed); an unmerged
                                                worker branch is recorded on the card as branch:
   lean done T-NNN [--commit sha] [--notes id,id] [--no-tests "<why>"]
-                                               refuses unless the card's commits changed a test file;
-                                               removes merged worker worktrees and their branches
+                                               refuses unless its commits or uncommitted changes include a
+                                               test file; run it before the card commit so one commit holds
+                                               code and record; removes merged worker worktrees
   lean check-parallel T-a T-b ...              deps done, no shared files
+  lean batch [--spec S-NNN]                    next cards to run together: ready, disjoint files, ≤ maxAgents
+  lean check-plan S-NNN                        waves, plus merge suggestions: chains, shared files, budget, size
   lean test [--fast] [--cmd "<command>"] [--force]
                                                run tests, print only failures + summary; reuses a passing
                                                run when no code changed since (--force reruns)
@@ -89,11 +93,14 @@ const norm = (f) => f.replace(/\\/g, '/').replace(/^\.\//, '').toLowerCase();
 const overlaps = (a, b) => a === b || a.startsWith(b.replace(/\/?$/, '/')) || b.startsWith(a.replace(/\/?$/, '/'));
 const TEST_FILE = /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$/i;
 
-function filesTouchedBy(c) {
+function filesTouchedBy(r, c) {
   const touched = new Set();
   const add = (out) => (out || '').split(/\r?\n/).forEach((f) => f.trim() && touched.add(f.trim()));
-  add(git(`log --grep=${c.id}: --name-only --format=`));
-  if (opt.commit) add(git(`diff --name-only ${opt.commit}~1 ${opt.commit}`));
+  add(git(`-C "${r}" log --grep=${c.id}: --name-only --format=`));
+  if (opt.commit) add(git(`-C "${r}" diff --name-only ${opt.commit}~1 ${opt.commit}`));
+  // Uncommitted work counts too: lean done runs before the card commit, or inside a --no-commit merge.
+  add(git(`-C "${r}" diff --name-only HEAD`));
+  add(git(`-C "${r}" ls-files --others --exclude-standard`));
   return [...touched];
 }
 
@@ -218,6 +225,60 @@ function removeWorktree(r, w) {
   if (w.branch) gitC(r, `branch -d "${w.branch}"`);
   return true;
 }
+
+function cleanMergedWorktrees(r) {
+  const removed = [];
+  for (const w of workerWorktrees(r).filter((x) => worktreeState(x) === 'merged')) {
+    if (removeWorktree(r, w)) removed.push(w.branch || path.basename(w.path));
+    else console.log(`could not remove worktree ${w.path} (see lean doctor)`);
+  }
+  return removed;
+}
+
+// ---- waves: which cards run together ----
+const isHuman = (c) => /^HUMAN:/i.test(c.data.title || '');
+const depsOf = (c) => list(c.data.depends).map((d) => d.toUpperCase());
+
+// Up to `max` ready cards with disjoint files, the ones unblocking the most open cards first. HUMAN cards never batch.
+function pickBatch(cards, ready, max) {
+  const unblocks = (id) => cards.filter((c) => !c.done && depsOf(c).includes(id)).length;
+  const picked = [];
+  const claimed = [];
+  for (const c of [...ready].sort((a, b) => unblocks(b.id) - unblocks(a.id) || a.id.localeCompare(b.id))) {
+    if (picked.length >= max) break;
+    if (isHuman(c)) continue;
+    const files = list(c.data.files).map(norm);
+    if (!files.length) {
+      // Without a file list nothing proves it safe to share a wave.
+      if (!picked.length) {
+        picked.push(c);
+        break;
+      }
+      continue;
+    }
+    if (claimed.some((x) => files.some((f) => overlaps(x, f)))) continue;
+    picked.push(c);
+    claimed.push(...files);
+  }
+  return picked;
+}
+
+// The batches in order, assuming each one lands: how many waves the remaining work needs.
+function planWaves(cards, inScope, max) {
+  const sim = cards.map((c) => ({ ...c, data: { ...c.data, status: c.done ? c.data.status : 'todo' } }));
+  const waves = [];
+  for (;;) {
+    const ready = readyCards(sim).filter(inScope);
+    const batch = pickBatch(sim, ready, max);
+    const pick = batch.length ? batch : ready.filter(isHuman).slice(0, 1);
+    if (!pick.length) break;
+    waves.push(pick.map((c) => c.id));
+    for (const c of pick) c.done = true;
+  }
+  return { waves, stuck: sim.filter((c) => !c.done && inScope(c)).map((c) => c.id) };
+}
+
+const maxAgents = (r) => Math.max(1, parseInt(configOf(r).parallel?.maxAgents || 3, 10));
 
 // Notes worth reading before a card, beyond the ones its Watch section already cites.
 function cardNotes(r, c, max = 3) {
@@ -366,9 +427,9 @@ switch (cmd) {
     const c = card(r, pos[0]);
     const exempt = /^HUMAN:/i.test(c.data.title || '');
     const reason = typeof opt['no-tests'] === 'string' ? opt['no-tests'].replace(/\r?\n/g, ' ').trim() : '';
-    if (!exempt && !reason && !filesTouchedBy(c).some((f) => TEST_FILE.test(f))) {
+    if (!exempt && !reason && !filesTouchedBy(r, c).some((f) => TEST_FILE.test(f))) {
       die(
-        `${c.id}: none of its commits changed a test file. Add tests for its "Done when" items and commit them, ` +
+        `${c.id}: no test file in its commits or uncommitted changes. Add tests for its "Done when" items, ` +
           `or finish with --no-tests "<why tests aren't possible>".`
       );
     }
@@ -386,12 +447,9 @@ switch (cmd) {
     });
     const next = readyCards(loadCards(r)).map((n) => n.id);
     console.log(`done ${c.id}. ready: ${next.join(', ') || 'none'}`);
+    if (gitC(r, 'status --porcelain')) console.log(`next: commit the work and .lean/ together as "${c.id}: ${c.data.title || ''}"`);
 
-    const removed = [];
-    for (const w of workerWorktrees(r).filter((x) => worktreeState(x) === 'merged')) {
-      if (removeWorktree(r, w)) removed.push(w.branch || path.basename(w.path));
-      else console.log(`could not remove worktree ${w.path} (see lean doctor)`);
-    }
+    const removed = cleanMergedWorktrees(r);
     if (removed.length) console.log(`removed merged worker worktrees: ${removed.join(', ')}`);
     break;
   }
@@ -588,6 +646,106 @@ switch (cmd) {
       [...info.values()].slice(0, 5).forEach((l) => console.log(`  ${l}`));
     }
     process.exitCode = findings.some((x) => x.sev === 'BLOCKER') ? 2 : 0;
+    break;
+  }
+
+  case 'batch': {
+    const r = need();
+    const removed = cleanMergedWorktrees(r);
+    if (removed.length) console.log(`removed merged worker worktrees: ${removed.join(', ')}`);
+    const spec = opt.spec ? String(opt.spec).toUpperCase() : null;
+    const inScope = (c) => !spec || String(c.data.spec || '').toUpperCase() === spec;
+    const all = loadCards(r);
+    const open = all.filter((c) => !c.done && inScope(c));
+    const ready = readyCards(all).filter(inScope);
+    const batch = pickBatch(all, ready, maxAgents(r));
+    if (batch.length) {
+      console.log(`batch: ${batch.map((c) => c.id).join(' ')}`);
+      batch.forEach((c) => console.log(`  ${c.id} ${c.data.title || ''}`));
+      console.log(`waves left: ${planWaves(all, inScope, maxAgents(r)).waves.length}`);
+    } else if (!open.length) {
+      console.log(`phase done${spec ? `: every ${spec} card is done` : ''}`);
+    } else if (ready.some(isHuman)) {
+      console.log(`human: ${ready.filter(isHuman).map((c) => `${c.id} ${c.data.title}`).join('; ')}`);
+    } else {
+      const doing = open.filter((c) => c.data.status === 'doing');
+      console.log(
+        doing.length
+          ? `none ready · in progress: ${doing.map((c) => c.id).join(', ')}`
+          : `none ready · ${open.length} open card(s) wait on unfinished dependencies`
+      );
+    }
+    break;
+  }
+
+  case 'check-plan': {
+    const r = need();
+    const spec = String(pos[0] || '').toUpperCase() || die('usage: lean check-plan S-NNN');
+    const doc = loadSpecs(r).find((s) => s.id === spec) || die(`spec ${spec} not found`);
+    const all = loadCards(r);
+    const inScope = (c) => String(c.data.spec || '').toUpperCase() === spec;
+    const cards = all.filter(inScope);
+    if (!cards.length) die(`no cards for ${spec}`);
+    const open = cards.filter((c) => !c.done);
+    const byId = new Map(all.map((c) => [c.id, c]));
+    const ancestors = (id, seen = new Set()) => {
+      for (const d of byId.has(id) ? depsOf(byId.get(id)) : []) {
+        if (!seen.has(d)) {
+          seen.add(d);
+          ancestors(d, seen);
+        }
+      }
+      return seen;
+    };
+    const filesOf = new Map(cards.map((c) => [c.id, list(c.data.files).map(norm)]));
+    const suggestions = [];
+
+    const acceptance = doc.body.split(/^## /m).find((s) => /^Acceptance/i.test(s)) || '';
+    const criteria = new Set(acceptance.match(/\bA\d+\b/g) || []).size;
+    const budget = Math.ceil(criteria / 2) + 1;
+    const work = cards.filter((c) => !isHuman(c)).length;
+    if (criteria && work > budget) {
+      suggestions.push(`budget: ${work} cards for ${criteria} acceptance criteria (aim for ≤ ${budget}: ~1 per 2, plus a contracts card)`);
+    }
+
+    for (let i = 0; i < open.length; i++) {
+      for (let j = i + 1; j < open.length; j++) {
+        const [a, b] = [open[i], open[j]];
+        const shared = filesOf.get(a.id).filter((f) => filesOf.get(b.id).some((g) => overlaps(f, g)));
+        if (!shared.length) continue;
+        const names = shared.map((f) => f.split('/').pop()).join(', ');
+        if (!ancestors(a.id).has(b.id) && !ancestors(b.id).has(a.id)) {
+          suggestions.push(`conflict: ${a.id} + ${b.id} share ${names}, so they can't run together → merge them, or move the shared edit into a contracts card both depend on`);
+        } else if (shared.length >= 2) {
+          suggestions.push(`re-touch: ${a.id} + ${b.id} both edit ${names} → merge them, or give all those edits to the earlier card`);
+        }
+      }
+    }
+
+    for (const a of open) {
+      const kids = all.filter((c) => !c.done && depsOf(c).includes(a.id));
+      if (kids.length === 1 && depsOf(kids[0]).length === 1 && !isHuman(a) && !isHuman(kids[0])) {
+        suggestions.push(`chain: ${a.id} → ${kids[0].id} only unblock each other → merge into one card`);
+      }
+    }
+
+    for (const c of open) {
+      const n = filesOf.get(c.id).length;
+      if (n > 12) suggestions.push(`size: ${c.id} lists ${n} files → split by behavior, or fold a sweep into the cards that already edit those files`);
+      if (!n && !isHuman(c)) suggestions.push(`files: ${c.id} lists no files, so it can never share a wave`);
+    }
+
+    const { waves, stuck } = planWaves(all, inScope, maxAgents(r));
+    console.log(
+      `${spec}: ${cards.length} cards (${open.length} open) · ${criteria} acceptance criteria · ${waves.length} waves at up to ${maxAgents(r)} agents`
+    );
+    waves.forEach((w, i) => console.log(`  wave ${i + 1}: ${w.join(' ')}`));
+    if (stuck.length) console.log(`  never ready: ${stuck.join(' ')} (a dependency is missing or circular)`);
+    console.log(
+      suggestions.length
+        ? `Suggestions (${suggestions.length}):\n${suggestions.map((s) => `- ${s}`).join('\n')}`
+        : 'No suggestions: cards are independent wherever they can be.'
+    );
     break;
   }
 

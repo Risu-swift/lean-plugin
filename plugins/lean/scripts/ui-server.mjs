@@ -17,6 +17,7 @@ import {
   list,
   buildReport,
   daysUntil,
+  commitFor,
 } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -54,7 +55,7 @@ function snapshot() {
       tdd: c.data.tdd || null,
       branch: c.data.branch || null,
       done: c.data.done || null,
-      commit: c.data.commit || null,
+      commit: c.data.commit || (c.done ? commitFor(root, c.id) : null),
       file: rel(c.file),
       body: c.body,
     })),

@@ -8,7 +8,7 @@
       "name": "lean",
       "source": "./plugins/lean",
       "description": "Token-lean workflow: grill → plan → do → compound, with Zettelkasten memory and no background LLM calls.",
-      "version": "0.7.0"
+      "version": "0.8.0"
     }
   ]
 }

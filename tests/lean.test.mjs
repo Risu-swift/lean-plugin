@@ -29,7 +29,7 @@ test('done refuses a card whose commits changed no test file', (t) => {
   p.commit('T-001: add a');
   const r = p.lean('done', 'T-001');
   assert.equal(r.code, 1);
-  assert.match(r.out, /none of its commits changed a test file/);
+  assert.match(r.out, /no test file in its commits or uncommitted changes/);
   assert.ok(p.exists('.lean/tasks/T-001-card.md'));
 });
 
@@ -150,6 +150,70 @@ test('doctor reports worktrees, and --fix removes only merged and empty ones plu
   for (const name of ['agent-unmerged', 'agent-dirty', 'agent-locked']) assert.ok(p.exists(`.claude/worktrees/${name}`), name);
   assert.doesNotMatch(p.git('branch'), /wip\/old|worktree-agent-merged|worktree-agent-empty/);
   assert.match(p.lean('doctor').out, /Nothing to clean/);
+});
+
+test('done counts uncommitted test files, so one commit holds the code and the record', (t) => {
+  const p = project(t);
+  p.card('T-001', { title: 'Add a', files: ['src/a.js', 'src/a.test.js'] });
+  p.write('src/a.js', '1');
+  p.write('src/a.test.js', 'test');
+  const r = p.lean('done', 'T-001', '--notes', 'z1');
+  assert.equal(r.code, 0, r.out);
+  assert.match(r.out, /next: commit the work and \.lean\/ together as "T-001: Add a"/);
+  const sha = p.commit('T-001: Add a');
+  assert.equal(p.git('status', '--porcelain'), '', 'nothing left for a separate mark-done commit');
+  assert.match(p.lean('status').out, new RegExp(`T-001 Add a @${sha}`));
+});
+
+test('batch picks ready cards with disjoint files, most-unblocking first, and hands HUMAN cards back', (t) => {
+  const p = project(t);
+  p.config({ parallel: { maxAgents: 2 } });
+  p.card('T-001', { files: ['a.js'] });
+  p.card('T-002', { files: ['a.js'] });
+  p.card('T-003', { files: ['c.js'] });
+  p.card('T-004', { files: ['d.js'], depends: ['T-003'] });
+  p.card('T-005', { files: ['e.js'], depends: ['T-003'] });
+  p.card('T-006', { title: 'HUMAN: deploy', depends: ['T-001', 'T-002', 'T-004', 'T-005'] });
+  const done = (...ids) => ids.forEach((id) => assert.equal(p.lean('done', id, '--no-tests', 'fixture').code, 0));
+
+  let out = p.lean('batch').out;
+  assert.match(out, /^batch: T-003 T-001$/m, 'T-003 unblocks two cards; T-002 shares a.js with T-001');
+  assert.match(out, /^waves left: 4$/m);
+  done('T-001', 'T-003');
+  assert.match(p.lean('batch').out, /^batch: T-002 T-004$/m, 'capped at maxAgents');
+  done('T-002', 'T-004');
+  assert.match(p.lean('batch').out, /^batch: T-005$/m);
+  done('T-005');
+  assert.match(p.lean('batch').out, /^human: T-006 HUMAN: deploy/m);
+  done('T-006');
+  assert.match(p.lean('batch').out, /^phase done/m);
+});
+
+test('check-plan reports waves and suggests merges for conflicts, re-touches, chains and over-budget plans', (t) => {
+  const spec = (p, criteria) =>
+    p.write('.lean/specs/S-001-demo.md', `---\nid: S-001\ntitle: Demo\nstatus: agreed\n---\n## Problem\nx\n## Acceptance\n${criteria.map((a) => `- ${a}: works`).join('\n')}\n## Risks\nnone\n`);
+  const s = { spec: 'S-001' };
+
+  const p = project(t);
+  spec(p, ['A1', 'A2']);
+  p.card('T-001', { ...s, files: ['src/types.ts'] });
+  p.card('T-002', { ...s, files: ['src/a.ts', 'src/shared.ts'] });
+  p.card('T-003', { ...s, files: ['src/b.ts', 'src/shared.ts'] });
+  p.card('T-004', { ...s, files: ['src/c.ts'], depends: ['T-001'] });
+  p.card('T-005', { ...s, files: ['src/a.ts', 'src/shared.ts'], depends: ['T-002'] });
+  const out = p.lean('check-plan', 'S-001').out;
+  assert.match(out, /S-001: 5 cards \(5 open\) · 2 acceptance criteria · 3 waves at up to 3 agents/);
+  assert.match(out, /wave 1: T-001 T-002\n\s+wave 2: T-003 T-004\n\s+wave 3: T-005/);
+  assert.match(out, /budget: 5 cards for 2 acceptance criteria/);
+  assert.match(out, /conflict: T-002 \+ T-003 share shared\.ts/);
+  assert.match(out, /re-touch: T-002 \+ T-005 both edit a\.ts, shared\.ts/);
+  assert.match(out, /chain: T-001 → T-004/);
+
+  const clean = project(t);
+  spec(clean, ['A1', 'A2', 'A3', 'A4']);
+  clean.card('T-001', { ...s, files: ['src/x.ts'] });
+  clean.card('T-002', { ...s, files: ['src/y.ts'] });
+  assert.match(clean.lean('check-plan', 'S-001').out, /1 waves[\s\S]*No suggestions/);
 });
 
 test('start prints the notes most related to a single card, skipping ones its Watch list cites', (t) => {

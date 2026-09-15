@@ -158,7 +158,8 @@ export function render(root) {
   if (st.recent?.length) {
     out.push('Recent:');
     for (const r of st.recent.slice(0, 5)) {
-      const commit = r.commit ? ` @${r.commit}` : '';
+      const sha = r.commit || commitFor(root, r.id);
+      const commit = sha ? ` @${sha}` : '';
       const notes = r.notes?.length ? ` zk:${r.notes.join(',')}` : '';
       out.push(`  - ${r.date} ${r.id} ${r.title || ''}${commit}${notes}`);
     }
@@ -166,6 +167,19 @@ export function render(root) {
   if (st.reviewed) out.push(`Last review: ${st.reviewed}`);
   if (st.secured) out.push(`Last security review: ${st.secured.sha} (${st.secured.date})`);
   return out.join('\n');
+}
+
+const commitShas = new Map();
+
+// The latest commit whose message starts with "T-NNN:" (the card commit or its merge). `lean done` runs before
+// that commit exists, so the sha is looked up here instead of being recorded.
+export function commitFor(root, id) {
+  if (!commitShas.has(id)) {
+    const sha = git(`-C "${root}" log -1 --format=%h --grep="^${id}:"`);
+    if (!sha) return null;
+    commitShas.set(id, sha);
+  }
+  return commitShas.get(id);
 }
 
 export function writeState(root) {

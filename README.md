@@ -20,6 +20,7 @@ In each project, run `lean init` once, then fill in `.lean/config.json` (`test`,
 | `/lean:grill <topic>` | Interview in rounds until nothing is assumed, then write `.lean/specs/S-NNN-*.md` |
 | `/lean:plan S-NNN` | Break a spec into task cards (`.lean/tasks/T-NNN-*.md`) |
 | `/lean:do [T-NNN…] [--parallel]` | Test first for logic, verify, commit, save notes. `--parallel` runs cards in worktrees |
+| `/lean:do --phase S-NNN` | Runs a whole spec in parallel waves in one sitting: `lean batch` → workers → merge → repeat, stopping at HUMAN cards |
 | `/lean:debug <symptom>` | Root cause first, then a regression test and a gotcha note |
 | `/lean:compound` | Turn session learnings into atomic notes |
 | `/lean:review [range]` | One report-only Sonnet review per milestone |
@@ -32,7 +33,10 @@ Status line (optional, costs no tokens): add this to `~/.claude/settings.json`:
 It shows project, git branch, current card, done/total, ready count, blockers, model, context % and 5-hour quota %.
 
 CLIs on the Bash PATH:
-- `lean status|tasks|next|start|reset|done|check-parallel|new-id|test|doctor|audit|secured|report|ui|focus|block|reviewed`
+- `lean status|tasks|next|start|reset|done|check-parallel|batch|check-plan|notes|new-id|test|doctor|audit|secured|report|ui|focus|block|reviewed`
+  - `lean batch [--spec S-NNN]` prints the next cards to run together (ready, disjoint files, up to `parallel.maxAgents`, the ones unblocking the most work first) and the waves left
+  - `lean check-plan S-NNN` shows the waves a plan needs and suggests merges: chains, cards sharing files, more cards than ~1 per 2 acceptance criteria, oversized cards
+  - One commit per card: run `lean done` before committing (it counts uncommitted test files), and the sha shown in STATE is looked up from git
   - `lean start T-x` also prints the card's top 3 related notes beyond its Watch list (`lean notes T-x` prints them any time); `lean start T-a T-b ...` marks several cards as in progress (used by `--parallel`); `lean reset T-x` puts an abandoned card back to Ready and records an unmerged worker branch as `branch:`
   - `lean done` refuses unless the card's commits changed a test file. Use `--no-tests "<why>"` when tests truly aren't possible; `HUMAN:` cards are exempt. It also removes merged worker worktrees and their branches.
   - `lean doctor [--fix]` lists leftover worker worktrees (merged, empty, unmerged, dirty, locked) and merged branches; `--fix` removes only merged and empty worktrees and merged branches

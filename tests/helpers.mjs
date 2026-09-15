@@ -50,11 +50,12 @@ export function project(t) {
       const f = path.join(dir, '.lean', 'config.json');
       fs.writeFileSync(f, JSON.stringify({ ...JSON.parse(fs.readFileSync(f, 'utf8')), ...patch }, null, 2));
     },
-    card(id, { title = `${id} card`, status = 'todo', depends = [], files = [], done = false, body = '' } = {}) {
+    card(id, { title = `${id} card`, status = 'todo', depends = [], files = [], done = false, body = '', spec } = {}) {
       const text = [
         '---',
         `id: ${id}`,
         `title: ${title}`,
+        ...(spec ? [`spec: ${spec}`] : []),
         `status: ${status}`,
         `depends: [${depends.join(', ')}]`,
         `files: [${files.join(', ')}]`,
