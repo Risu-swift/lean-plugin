@@ -15,6 +15,13 @@ Requirements: [Claude Code](https://claude.com/claude-code), Node 22+ and git.
    /plugin install lean@lean
    ```
 
+   Or from a shell (no leading slash):
+
+   ```
+   claude plugin marketplace add Risu-swift/lean-plugin
+   claude plugin install lean@lean
+   ```
+
 2. Restart Claude Code so the skills, hook and output style load.
 3. In each project, run `lean init` once, then fill in `.lean/config.json` (`test`, `testFast`, `parallel`).
 4. Check it works: `/lean:grill <topic>` should start an interview.
