@@ -1,14 +1,15 @@
 {
-  "name": "lean-local",
+  "name": "lean",
   "owner": {
-    "name": "mediaPro"
+    "name": "Risu-swift",
+    "url": "https://github.com/Risu-swift"
   },
   "plugins": [
     {
       "name": "lean",
       "source": "./plugins/lean",
       "description": "Token-lean workflow: grill → plan → do → compound, with Zettelkasten memory and no background LLM calls.",
-      "version": "0.8.0"
+      "version": "0.8.1"
     }
   ]
 }

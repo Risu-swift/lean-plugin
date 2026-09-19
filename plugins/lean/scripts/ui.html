@@ -673,13 +673,13 @@ function renderGraph(main) {
 // ---------- markdown (escaped first, so card text can never inject HTML) ----------
 function inline(s) {
   const codes = [];
-  s = s.replace(/`([^`]+)`/g, (_, c) => ` ${codes.push(c) - 1} `);
+  s = s.replace(/`([^`]+)`/g, (_, c) => `\u0000${codes.push(c) - 1}\u0000`);
   s = s
     .replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
     .replace(/(^|[\s(])\*([^*\s][^*]*)\*(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
     .replace(/(^|[\s(])_([^_\s][^_]*)_(?=[\s).,;:!?]|$)/g, '$1<em>$2</em>')
     .replace(/\[([^\]]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
-  return s.replace(/ (\d+) /g, (_, i) => `<code>${codes[i]}</code>`);
+  return s.replace(/\u0000(\d+)\u0000/g, (_, i) => `<code>${codes[i]}</code>`);
 }
 
 function linkify(html) {

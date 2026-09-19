@@ -110,12 +110,12 @@ const DEFAULT_SECURE_PATHS = ['**/*.rules', '**/auth/**', '**/functions/**', '**
 function globRe(glob) {
   const escaped = glob
     .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*\//g, '')
-    .replace(/\*\*/g, '')
+    .replace(/\*\*\//g, '\u0001')
+    .replace(/\*\*/g, '\u0002')
     .replace(/\*/g, '[^/]*')
     .replace(/\?/g, '[^/]')
-    .replace(//g, '(?:.*/)?')
-    .replace(//g, '.*');
+    .replace(/\u0001/g, '(?:.*/)?')
+    .replace(/\u0002/g, '.*');
   return new RegExp(`^${escaped}$`, 'i');
 }
 
@@ -584,7 +584,7 @@ switch (cmd) {
       } catch {
         continue;
       }
-      if (text.includes(' ')) continue;
+      if (text.includes('\u0000')) continue;
       const isTest = TEST_FILE.test(f);
       const isRules = /\.rules$/i.test(f);
       text.split(/\r?\n/).forEach((line, i) => {

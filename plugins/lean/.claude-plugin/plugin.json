@@ -1,9 +1,13 @@
 {
   "name": "lean",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "Token-lean workflow: grill → plan → do → compound, with Zettelkasten memory and no background LLM calls.",
   "author": {
-    "name": "mediaPro"
+    "name": "Risu-swift",
+    "url": "https://github.com/Risu-swift"
   },
+  "homepage": "https://github.com/Risu-swift/lean-plugin",
+  "repository": "https://github.com/Risu-swift/lean-plugin",
+  "license": "MIT",
   "keywords": ["workflow", "planning", "tdd", "zettelkasten", "memory"]
 }

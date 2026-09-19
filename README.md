@@ -12,14 +12,14 @@ Requirements: [Claude Code](https://claude.com/claude-code), Node 22+ and git.
 
    ```
    /plugin marketplace add Risu-swift/lean-plugin
-   /plugin install lean@lean-local
+   /plugin install lean@lean
    ```
 
 2. Restart Claude Code so the skills, hook and output style load.
 3. In each project, run `lean init` once, then fill in `.lean/config.json` (`test`, `testFast`, `parallel`).
 4. Check it works: `/lean:grill <topic>` should start an interview.
 
-To update later: `/plugin marketplace update lean-local`, then reinstall the plugin.
+To update later: `/plugin marketplace update lean`, then reinstall the plugin.
 
 ### From a local clone
 
@@ -33,7 +33,7 @@ Then in Claude Code:
 
 ```
 /plugin marketplace add ./lean-plugin
-/plugin install lean@lean-local
+/plugin install lean@lean
 ```
 
 ## Commands
@@ -65,8 +65,6 @@ CLIs on the Bash PATH:
   - `lean done` refuses unless the card's commits changed a test file. Use `--no-tests "<why>"` when tests truly aren't possible; `HUMAN:` cards are exempt. It also removes merged worker worktrees and their branches.
   - `lean doctor [--fix]` lists leftover worker worktrees (merged, empty, unmerged, dirty, locked) and merged branches; `--fix` removes only merged and empty worktrees and merged branches
   - The focus line is computed from the cards (active spec, progress, now/next). `lean focus "<note>"` pins a temporary note that clears at the next `lean done`.
-
-Recommended user setting for `--parallel`: `"worktree": { "baseRef": "head" }`. Without it, worker worktrees branch from `origin/<default>` and miss unpushed commits.
   - `lean test`: runs the suite and prints only failures plus a summary (saves tokens on every card). A pass is reused while the code (HEAD plus uncommitted changes, ignoring `.lean/`) is unchanged; a passing full run also covers `--fast`. `--force` reruns.
   - `lean report --out docs/reports/<date>.md`: markdown progress report for clients
   - `lean ui`: read-only local dashboard at http://127.0.0.1:4777 with four views: board, notes search, notes graph, specs with acceptance coverage and the report. It updates live, and `lean ui --stop` stops it (it also stops itself after an hour idle).
@@ -76,9 +74,11 @@ Recommended user setting for `--parallel`: `"worktree": { "baseRef": "head" }`. 
   - `zk supersede <old> <new>` marks a note replaced; `find` and `ls` hide it unless `--all`
   - `zk lint` flags dangling links and project notes that cite files no longer in the repo
 
+Recommended user setting for `--parallel`: `"worktree": { "baseRef": "head" }`. Without it, worker worktrees branch from `origin/<default>` and miss unpushed commits.
+
 ## Development
 
-`npm test` (Node 22+, no dependencies) runs the CLI tests in throwaway git repos. After editing, run `claude plugin marketplace update lean-local` and update the plugin so the cache picks up the change.
+`npm test` (Node 22+, no dependencies) runs the CLI tests in throwaway git repos. After editing, run `claude plugin marketplace update lean` and update the plugin so the cache picks up the change. Record changes in [CHANGELOG.md](CHANGELOG.md) and bump the version in both `plugin.json` and `marketplace.json`.
 
 ## Layout
 
@@ -98,3 +98,7 @@ Recommended user setting for `--parallel`: `"worktree": { "baseRef": "head" }`. 
 - Notes are searched, never loaded whole.
 - Subagents are used only for `--parallel` workers (Sonnet) and review (Sonnet, forked).
 - One card per session, then `/clear`.
+
+## License
+
+[MIT](LICENSE)

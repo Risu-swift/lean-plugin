@@ -1,0 +1,35 @@
+# Changelog
+
+## 0.8.1 — 2026-09-19
+
+- Published on GitHub under the MIT license. Install with `/plugin marketplace add Risu-swift/lean-plugin`, then `/plugin install lean@lean`.
+- The marketplace is renamed from `lean-local` to `lean`. Existing installs need to remove the old marketplace and add it again.
+- `bin/lean` and `bin/zk` are now executable, so the CLIs work on macOS and Linux.
+- `.gitattributes` keeps LF line endings (CRLF for `.cmd`).
+- Raw control characters in `lean.mjs` and `ui.html` are replaced with `\u` escapes. Behavior is unchanged; the files are now diffable text.
+
+## 0.8.0 — 2026-09-15
+
+- `/lean:plan` slices specs by user-visible behavior with a card budget (~1 per 2 acceptance criteria), a contracts card for shared files, and merges for chains and file-sharing cards. It runs `lean check-plan` before finishing.
+- `lean check-plan S-NNN`: waves at `maxAgents`, plus budget, conflict, re-touch, chain and size suggestions.
+- `lean batch [--spec]`: the next disjoint ready cards, most-unblocking first. Reports HUMAN cards and phase completion, and cleans merged worktrees.
+- `/lean:do --phase S-NNN`: batch → workers → merge → repeat in one sitting.
+- `lean done` runs before the card commit (it counts uncommitted test files). The sha is looked up from git, so there is no separate mark-done commit.
+
+## 0.7.0 — 2026-09-15
+
+- `zk find`: whole-word and prefix matching, camelCase splitting, title > tags > body, IDF weighting, top 5 with weak hits dropped. Each hit prints its `Apply:` line.
+- `zk new` refuses a note similar to an existing one and prints the file to edit; `--force` overrides.
+- `lean start T-x` prints the card's top 3 related notes beyond its Watch list; `lean notes T-x` does the same read-only for parallel workers.
+- Skills drop the find-before-new and manual card search steps.
+
+## 0.6.0 — 2026-09-15
+
+- `tests/`: node:test suite for `lean` and `zk`.
+- `lean done` removes merged worker worktrees; `lean reset` records unmerged worker branches on the card; `lean doctor [--fix]` reports leftovers.
+- `lean test` reuses a passing run while HEAD plus uncommitted code is unchanged.
+- `zk supersede` hides replaced notes; `zk lint` flags dangling links and notes citing files no longer in the repo.
+
+## 0.5.0 — 2026-09-15
+
+- Initial import.
