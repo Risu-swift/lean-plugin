@@ -253,3 +253,39 @@ test('reset puts the card back to todo and records its unmerged worker branch', 
   assert.match(text, /status: todo/);
   assert.match(text, /branch: worktree-agent-x/);
 });
+
+test('research lists open questions, blocks close until all are answered, and flags check-plan', (t) => {
+  const p = project(t);
+  const spec = (research) =>
+    p.write(
+      '.lean/specs/S-001-demo.md',
+      `---\nid: S-001\ntitle: Demo board\nstatus: needs-research\ntags: [a, b]\n---\n## Problem\nx\n## Research\n${research}\n## Acceptance\n- A1: works\n`
+    );
+  spec('- R1: Does the NPU driver support INT8?\n  → Yes, since v1.6 (source: vendor docs)\n- R2: Can it boot from NVMe?');
+
+  assert.match(p.lean('research').out, /S-001 Demo board · 1 open → \/lean:research S-001/);
+  assert.match(p.lean('status').out, /Focus: S-001 Demo board needs research — next: \/lean:research S-001/);
+  assert.match(p.lean('status').out, /Research: S-001 \(1 open\)/);
+
+  const shown = p.lean('research', 'S-001').out;
+  assert.match(shown, /1\/2 open/);
+  assert.match(shown, /R1 done  Does the NPU driver support INT8\?\n\s+→ Yes, since v1\.6/);
+  assert.match(shown, /R2 OPEN  Can it boot from NVMe\?/);
+
+  const refused = p.lean('research', 'S-001', '--close');
+  assert.equal(refused.code, 1);
+  assert.match(refused.out, /R2 still open/);
+  assert.match(p.read('.lean/specs/S-001-demo.md'), /status: needs-research/);
+
+  p.card('T-001', { spec: 'S-001', files: ['src/a.ts'] });
+  assert.match(p.lean('check-plan', 'S-001').out, /research: R2 still open → run \/lean:research S-001/);
+
+  spec('- R1: Does the NPU driver support INT8?\n  → Yes, since v1.6\n- R2: Can it boot from NVMe?\n  Answer: Yes, with the SPI bootloader update');
+  const closed = p.lean('research', 'S-001', '--close');
+  assert.equal(closed.code, 0, closed.out);
+  assert.match(closed.out, /S-001 agreed — next: \/lean:plan S-001/);
+  const text = p.read('.lean/specs/S-001-demo.md');
+  assert.match(text, /^---\nid: S-001\ntitle: Demo board\nstatus: agreed\ntags: \[a, b\]\n---/);
+  assert.equal(p.lean('research').out.trim(), 'no specs need research');
+  assert.doesNotMatch(p.lean('check-plan', 'S-001').out, /research:/);
+});

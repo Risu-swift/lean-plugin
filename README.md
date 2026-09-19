@@ -1,6 +1,6 @@
 # lean
 
-A Claude Code plugin for a token-lean workflow: **grill → plan → do → compound**. Memory is kept as Zettelkasten notes, and nothing runs an LLM in the background.
+A Claude Code plugin for a token-lean workflow: **grill → (research) → plan → do → compound**. Research runs only when grilling finds facts nobody can answer yet. Memory is kept as Zettelkasten notes, and nothing runs an LLM in the background.
 
 Inspired by [grilling / grill-me](https://github.com/mattpocock/skills), [Superpowers](https://github.com/obra/superpowers) and [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
@@ -48,6 +48,7 @@ Then in Claude Code:
 | Skill | Purpose |
 |---|---|
 | `/lean:grill <topic>` | Interview in rounds until nothing is assumed, then write `.lean/specs/S-NNN-*.md` |
+| `/lean:research S-NNN` | Only when grill left `R1…` questions (library abilities, hardware, limits, speed): one Sonnet researcher per question finds a sourced answer from docs, the web or a throwaway spike, then you settle the decisions that waited. `/lean:plan` refuses until it's done |
 | `/lean:plan S-NNN` | Break a spec into task cards (`.lean/tasks/T-NNN-*.md`) |
 | `/lean:do [T-NNN…] [--parallel]` | Test first for logic, verify, commit, save notes. `--parallel` runs cards in worktrees |
 | `/lean:do --phase S-NNN` | Runs a whole spec in parallel waves in one sitting: `lean batch` → workers → merge → repeat, stopping at HUMAN cards |
@@ -64,7 +65,8 @@ Use a clone path, not the plugin cache: the cache folder name changes with each 
 It shows project, git branch, current card, done/total, ready count, blockers, model, context % and 5-hour quota %.
 
 CLIs on the Bash PATH:
-- `lean status|tasks|next|start|reset|done|check-parallel|batch|check-plan|notes|new-id|test|doctor|audit|secured|report|ui|focus|block|reviewed`
+- `lean status|tasks|next|start|reset|done|check-parallel|batch|check-plan|research|notes|new-id|test|doctor|audit|secured|report|ui|focus|block|reviewed`
+  - `lean research [S-NNN] [--close]` lists a spec's research questions as OPEN or done (no id: every spec that needs research); `--close` marks the spec agreed, and refuses while a question is open. `lean check-plan` flags open questions too
   - `lean batch [--spec S-NNN]` prints the next cards to run together (ready, disjoint files, up to `parallel.maxAgents`, the ones unblocking the most work first) and the waves left
   - `lean check-plan S-NNN` shows the waves a plan needs and suggests merges: chains, cards sharing files, more cards than ~1 per 2 acceptance criteria, oversized cards
   - One commit per card: run `lean done` before committing (it counts uncommitted test files), and the sha shown in STATE is looked up from git
@@ -103,7 +105,7 @@ Recommended user setting for `--parallel`: `"worktree": { "baseRef": "head" }`. 
 - No background LLM calls. The only hook is SessionStart, which prints STATE.
 - All skills use `disable-model-invocation`, so their descriptions never load until you type the command.
 - Notes are searched, never loaded whole.
-- Subagents are used only for `--parallel` workers (Sonnet) and review (Sonnet, forked).
+- Subagents are used only for `--parallel` workers (Sonnet), research questions (Sonnet, one per question, 150-word replies) and review (Sonnet, forked).
 - One card per session, then `/clear`.
 
 ## License

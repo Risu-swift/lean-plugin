@@ -1,5 +1,6 @@
 {
   "name": "lean",
+  "description": "Token-lean Claude Code workflow plugin: grill, research, plan, do, compound.",
   "owner": {
     "name": "Risu-swift",
     "url": "https://github.com/Risu-swift"
@@ -9,7 +10,7 @@
       "name": "lean",
       "source": "./plugins/lean",
       "description": "Token-lean workflow: grill → plan → do → compound, with Zettelkasten memory and no background LLM calls.",
-      "version": "0.8.1"
+      "version": "0.9.0"
     }
   ]
 }

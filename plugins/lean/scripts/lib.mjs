@@ -116,7 +116,11 @@ export function readyCards(cards) {
 
 // Focus is computed from the cards so it can never go stale: the active spec, its progress, and what's next.
 export function focusLine(root, cards = loadCards(root)) {
-  if (!cards.length) return 'no cards yet — next: /lean:grill <topic>';
+  if (!cards.length) {
+    const waiting = loadSpecs(root).find(needsResearch);
+    if (waiting) return `${waiting.id} ${waiting.data.title || ''} needs research — next: /lean:research ${waiting.id}`;
+    return 'no cards yet — next: /lean:grill <topic>';
+  }
   const open = cards.filter((c) => !c.done);
   const doing = open.filter((c) => c.data.status === 'doing');
   const ready = readyCards(cards);
@@ -151,6 +155,11 @@ export function render(root) {
     ? ready.slice(0, 6).map(label).join('; ') + (ready.length > 6 ? ` (+${ready.length - 6})` : '')
     : '—';
   out.push(`Ready: ${readyText}${waiting > 0 ? ` · waiting on deps: ${waiting}` : ''}`);
+  const research = loadSpecs(root).filter(needsResearch);
+  if (research.length) {
+    const open = (s) => researchOf(s).filter((q) => !q.answer).length;
+    out.push(`Research: ${research.map((s) => `${s.id} (${open(s)} open) → /lean:research ${s.id}`).join('; ')}`);
+  }
   if (st.blockers?.length) {
     out.push('Blockers:');
     st.blockers.forEach((b, i) => out.push(`  ${i + 1}. ${b}`));
@@ -335,6 +344,25 @@ export function loadSpecs(root) {
     })
     .sort((a, b) => num(a.id) - num(b.id));
 }
+
+// A spec's `## Research` section: `- R1: question`, answered by a following `→ answer` (or `Answer:`) line.
+export function researchOf(spec) {
+  const section = spec.body.split(/^## /m).find((s) => /^Research\b/i.test(s));
+  if (!section) return [];
+  const items = [];
+  for (const line of section.split(/\r?\n/).slice(1)) {
+    const q = /^\s*-\s*(R\d+)\s*[:.]\s*(.*)$/i.exec(line);
+    if (q) {
+      items.push({ id: q[1].toUpperCase(), question: q[2].trim(), answer: null });
+      continue;
+    }
+    const a = /^\s*(?:→|->|answer:)\s*(.+)$/i.exec(line);
+    if (a && items.length && !items[items.length - 1].answer) items[items.length - 1].answer = a[1].trim();
+  }
+  return items;
+}
+
+export const needsResearch = (spec) => String(spec.data.status || '').toLowerCase() === 'needs-research';
 
 export function buildReport(root, since = new Date(Date.now() - 7 * 864e5).toLocaleDateString('sv-SE')) {
   const st = readJson(path.join(root, '.lean', 'state.json'), {});

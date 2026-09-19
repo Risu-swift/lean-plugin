@@ -26,10 +26,11 @@ Map the topic as a design tree: each decision branches into the decisions that d
 - If an answer is free text, a clarification or a new idea, respond to it briefly, then ask that decision again as a question in the next round.
 - After each round, recompute the frontier. Stop when it's empty.
 - Spend questions on decisions that are hard to change later: data model, trust boundaries, timing, failure behavior, what is out of scope. Decide trivia by convention and list it under "Defaults" in the spec.
+- **Research questions.** Some facts neither the user nor the code can give: what a library or API can do, hardware and driver support, service limits, whether something is fast enough. Don't guess them, and don't ask the user to go find out. Record each as `R1`, `R2`… (one testable question each, answerable with a source or a short spike), and leave the decisions that depend on it open, marked `(after R<n>)`. Keep asking everything else. Only record questions whose answer could change a decision; skip ones that are merely interesting.
 
 ## 2. Confirm
 
-Ask one AskUserQuestion: summarize the settled design in 8 lines or less, with the options "Write the spec" and "Changes first". Write nothing until the user confirms.
+Ask one AskUserQuestion: summarize the settled design in 8 lines or less, plus any research questions and the decisions waiting on them, with the options "Write the spec" and "Changes first". Write nothing until the user confirms.
 
 ## 3. Write
 
@@ -39,17 +40,18 @@ Ask one AskUserQuestion: summarize the settled design in 8 lines or less, with t
   ---
   id: S-NNN
   title: ...
-  status: agreed
+  status: agreed        (needs-research when there are R-questions)
   tags: [a, b]
   ---
   ## Problem          3-5 lines
-  ## Decisions        - D1: choice — why (zk <id>)
+  ## Decisions        - D1: choice — why (zk <id>);  - D2: (after R1) the options being weighed
   ## Defaults         conventions chosen without asking
+  ## Research         - R1: question   (only when there are research questions)
   ## Out of scope
   ## Acceptance       A1, A2 ... each one testable
   ## Risks
   ```
 
 - For each decision that is non-obvious or costly to reverse, run `zk new --type decision --title "<the decision as a claim>" --tags a,b --source S-NNN --body "Why: ...\nApply: ..."`. Put the note id next to the decision in the spec. Aim for 2–8 notes, not one per question. If `zk new` prints `similar note exists`, cite that note's id instead of creating one; when the decision reverses it, rerun with `--force`, then `zk supersede <old> <new>`.
-- Run `lean focus "S-NNN agreed, next: /lean:plan S-NNN"`. This is a temporary note; the focus line itself updates automatically from the cards.
-- Report in 3 lines: the spec path, the notes created, and the next step `/lean:plan S-NNN`.
+- Run `lean focus "S-NNN agreed, next: /lean:plan S-NNN"` (or `"S-NNN needs research, next: /lean:research S-NNN"`). This is a temporary note; the focus line itself updates automatically from the cards.
+- Report in 3 lines: the spec path, the notes created, and the next step: `/lean:research S-NNN` if there are research questions, otherwise `/lean:plan S-NNN`.

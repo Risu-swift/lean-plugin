@@ -13,6 +13,7 @@ Goal: the phase can finish in one sitting with `/lean:do --phase`. That takes fe
 
 ## 1. Load (cheap)
 
+- Run `lean research S-NNN`. If the spec is `needs-research` or any question is OPEN, stop: say which ones and suggest `/lean:research S-NNN`. Cards built on guesses get rebuilt.
 - Read the spec.
 - Run `zk find` on the spec's tags and look for gotcha and pattern notes. Use `zk show` only for the relevant ones.
 - Run `lean tasks --all` to see existing cards so you don't duplicate work.

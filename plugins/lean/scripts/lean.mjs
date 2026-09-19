@@ -24,6 +24,8 @@ import {
   noteLine,
   applyLine,
   loadSpecs,
+  researchOf,
+  needsResearch,
 } from './lib.mjs';
 
 const HELP = `lean — project state and task cards
@@ -45,6 +47,9 @@ const HELP = `lean — project state and task cards
   lean check-parallel T-a T-b ...              deps done, no shared files
   lean batch [--spec S-NNN]                    next cards to run together: ready, disjoint files, ≤ maxAgents
   lean check-plan S-NNN                        waves, plus merge suggestions: chains, shared files, budget, size
+  lean research [S-NNN] [--close]              research questions (R1…) and their answers; no id lists specs
+                                               that need research; --close marks the spec agreed once all
+                                               are answered
   lean test [--fast] [--cmd "<command>"] [--force]
                                                run tests, print only failures + summary; reuses a passing
                                                run when no code changed since (--force reruns)
@@ -61,7 +66,7 @@ const HELP = `lean — project state and task cards
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const [cmd, ...rest] = process.argv.slice(2);
-const { pos, opt } = parseArgs(rest, ['all', 'fast', 'stop', 'no-open', 'no-npm', 'force', 'fix']);
+const { pos, opt } = parseArgs(rest, ['all', 'fast', 'stop', 'no-open', 'no-npm', 'force', 'fix', 'close']);
 const die = (m) => {
   console.error(`lean: ${m}`);
   process.exit(1);
@@ -700,6 +705,12 @@ switch (cmd) {
     const filesOf = new Map(cards.map((c) => [c.id, list(c.data.files).map(norm)]));
     const suggestions = [];
 
+    const unanswered = researchOf(doc).filter((q) => !q.answer).map((q) => q.id);
+    if (needsResearch(doc) || unanswered.length) {
+      const which = unanswered.length ? `${unanswered.join(', ')} still open` : 'spec is still needs-research';
+      suggestions.push(`research: ${which} → run /lean:research ${spec} before planning on guesses`);
+    }
+
     const acceptance = doc.body.split(/^## /m).find((s) => /^Acceptance/i.test(s)) || '';
     const criteria = new Set(acceptance.match(/\bA\d+\b/g) || []).size;
     const budget = Math.ceil(criteria / 2) + 1;
@@ -746,6 +757,39 @@ switch (cmd) {
         ? `Suggestions (${suggestions.length}):\n${suggestions.map((s) => `- ${s}`).join('\n')}`
         : 'No suggestions: cards are independent wherever they can be.'
     );
+    break;
+  }
+
+  case 'research': {
+    const r = need();
+    const specs = loadSpecs(r);
+    if (!pos[0]) {
+      const waiting = specs.filter(needsResearch);
+      if (!waiting.length) console.log('no specs need research');
+      for (const s of waiting) {
+        const open = researchOf(s).filter((q) => !q.answer).length;
+        console.log(`${s.id} ${s.data.title || ''} · ${open} open → /lean:research ${s.id}`);
+      }
+      break;
+    }
+    const id = String(pos[0]).toUpperCase();
+    const doc = specs.find((s) => s.id === id) || die(`spec ${id} not found`);
+    const items = researchOf(doc);
+    const open = items.filter((q) => !q.answer);
+    console.log(`${id} ${doc.data.title || ''} · status: ${doc.data.status || '—'} · ${open.length}/${items.length} open`);
+    for (const q of items) {
+      console.log(`  ${q.id} ${q.answer ? 'done' : 'OPEN'}  ${q.question}`);
+      if (q.answer) console.log(`       → ${q.answer}`);
+    }
+    if (!opt.close) break;
+    if (open.length) die(`${open.map((q) => q.id).join(', ')} still open — answer them in the spec first`);
+    // Edit only the status line, so the rest of the spec's frontmatter keeps its exact formatting.
+    const text = fs.readFileSync(doc.file, 'utf8');
+    const fm = /^---\r?\n([\s\S]*?)\r?\n---/.exec(text) || die(`${id} has no frontmatter`);
+    const head = /^status:.*$/m.test(fm[1]) ? fm[1].replace(/^status:.*$/m, 'status: agreed') : `${fm[1]}\nstatus: agreed`;
+    fs.writeFileSync(doc.file, text.replace(fm[1], head));
+    writeState(r);
+    console.log(`${id} agreed — next: /lean:plan ${id}`);
     break;
   }
 

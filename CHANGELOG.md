@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.9.0 — 2026-09-19
+
+- Optional research phase between grill and plan, for facts neither the user nor the code can give (library abilities, hardware and drivers, service limits, speed).
+- `/lean:grill` records such facts as `R1…` questions under `## Research`, marks the decisions that wait on them `(after R<n>)`, and writes the spec as `status: needs-research`.
+- `/lean:research S-NNN` runs one `lean:researcher` agent (Sonnet) per open question, in parallel. Each finds a sourced answer from docs, the web or a throwaway spike in the temp dir, and replies in 150 words or less. Findings go into the spec and become `fact` notes; low-confidence answers go to the user; the waiting decisions are then settled in one grill-style round.
+- `lean research [S-NNN] [--close]` lists questions as OPEN or done; `--close` marks the spec agreed once all are answered.
+- `/lean:plan` refuses a spec with open research; `lean check-plan` flags it; STATE and the focus line point to `/lean:research`.
+
 ## 0.8.1 — 2026-09-19
 
 - Published on GitHub under the MIT license. Install with `/plugin marketplace add Risu-swift/lean-plugin`, then `/plugin install lean@lean`.
