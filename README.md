@@ -4,14 +4,37 @@ A Claude Code plugin for a token-lean workflow: **grill → plan → do → comp
 
 Inspired by [grilling / grill-me](https://github.com/mattpocock/skills), [Superpowers](https://github.com/obra/superpowers) and [Compound Engineering](https://github.com/EveryInc/compound-engineering-plugin).
 
-## Install (local marketplace)
+## Install
+
+Requirements: [Claude Code](https://claude.com/claude-code), Node 22+ and git.
+
+1. In Claude Code, add the marketplace and install the plugin:
+
+   ```
+   /plugin marketplace add Risu-swift/lean-plugin
+   /plugin install lean@lean-local
+   ```
+
+2. Restart Claude Code so the skills, hook and output style load.
+3. In each project, run `lean init` once, then fill in `.lean/config.json` (`test`, `testFast`, `parallel`).
+4. Check it works: `/lean:grill <topic>` should start an interview.
+
+To update later: `/plugin marketplace update lean-local`, then reinstall the plugin.
+
+### From a local clone
+
+For working on the plugin itself:
 
 ```
-/plugin marketplace add D:/Tools/lean-plugin
+git clone https://github.com/Risu-swift/lean-plugin.git
+```
+
+Then in Claude Code:
+
+```
+/plugin marketplace add ./lean-plugin
 /plugin install lean@lean-local
 ```
-
-In each project, run `lean init` once, then fill in `.lean/config.json` (`test`, `testFast`, `parallel`).
 
 ## Commands
 
@@ -29,7 +52,8 @@ In each project, run `lean init` once, then fill in `.lean/config.json` (`test`,
 Output style: `lean-focus` is forced on while the plugin is enabled. It's adapted from [i-have-adhd](https://github.com/ayghri/i-have-adhd): answer first, lists capped at 5, no filler, one next action.
 
 Status line (optional, costs no tokens): add this to `~/.claude/settings.json`:
-`"statusLine": {"type": "command", "command": "node \"D:/Tools/lean-plugin/plugins/lean/scripts/statusline.mjs\""}`
+`"statusLine": {"type": "command", "command": "node \"<path-to-clone>/plugins/lean/scripts/statusline.mjs\""}`
+Use a clone path, not the plugin cache: the cache folder name changes with each version.
 It shows project, git branch, current card, done/total, ready count, blockers, model, context % and 5-hour quota %.
 
 CLIs on the Bash PATH:
