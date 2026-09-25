@@ -344,3 +344,59 @@ test('research lists open questions, blocks close until all are answered, and fl
   assert.equal(p.lean('research').out.trim(), 'no specs need research');
   assert.doesNotMatch(p.lean('check-plan', 'S-001').out, /research:/);
 });
+
+// A bare remote plus a second clone standing in for a teammate.
+function withRemote(p) {
+  const bare = path.join(p.home, 'remote.git');
+  p.gitIn(p.home, 'init', '-q', '--bare', '-b', 'main', bare);
+  p.git('remote', 'add', 'origin', bare);
+  p.git('push', '-q', '-u', 'origin', 'main');
+  const other = path.join(p.home, 'other');
+  p.gitIn(p.home, 'clone', '-q', bare, other);
+  for (const [k, v] of [['user.name', 'other'], ['user.email', 'o@test.local'], ['commit.gpgsign', 'false']]) {
+    p.gitIn(other, 'config', k, v);
+  }
+  return other;
+}
+
+test('with sync on, start pulls first and sync pushes the card commit', (t) => {
+  const p = project(t);
+  p.config({ sync: true });
+  p.card('T-001');
+  p.commit('cards');
+  const other = withRemote(p);
+  p.write('teammate.txt', 'hi\n', other);
+  p.commit('teammate work', other);
+  p.gitIn(other, 'push', '-q');
+
+  const start = p.lean('start', 'T-001');
+  assert.equal(start.code, 0, start.out);
+  assert.match(start.out, /sync: origin\/main pulled 1 commit/);
+  assert.ok(p.exists('teammate.txt'));
+
+  p.write('a.test.js', '// a\n');
+  assert.match(p.lean('done', 'T-001', '--no-tests', 'x').out, /then `lean sync`/);
+  p.commit('T-001: T-001 card');
+  const sync = p.lean('sync');
+  assert.equal(sync.code, 0, sync.out);
+  assert.match(sync.out, /pushed 1 commit\(s\) to origin\/main/);
+  p.gitIn(other, 'pull', '-q');
+  assert.equal(p.gitIn(other, 'log', '-1', '--format=%s'), 'T-001: T-001 card');
+});
+
+test('start does not pull without sync, and sync skips a branch with no upstream', (t) => {
+  const p = project(t);
+  p.card('T-001');
+  p.commit('cards');
+  const other = withRemote(p);
+  p.write('teammate.txt', 'hi\n', other);
+  p.commit('teammate work', other);
+  p.gitIn(other, 'push', '-q');
+  assert.doesNotMatch(p.lean('start', 'T-001').out, /sync:/);
+  assert.ok(!p.exists('teammate.txt'));
+
+  p.git('checkout', '-q', '-b', 'local-only');
+  const sync = p.lean('sync');
+  assert.equal(sync.code, 0);
+  assert.match(sync.out, /no upstream branch, skipped/);
+});

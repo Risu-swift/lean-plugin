@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.12.0 — 2026-09-25
+
+- Git sync per card: set `"sync": true` in `.lean/config.json`. `lean start` runs `git pull --rebase=merges --autostash` before marking cards doing, and stops if the pull fails.
+- New `lean sync`: pull, then push the current branch. `/lean:do` runs it after each card commit (sequential) or once after a wave's merges (parallel and phase).
+- A branch with no upstream is skipped with a hint. `lean init` writes `"sync": false`; without it, behavior is unchanged.
+
 ## 0.11.0 — 2026-09-25
 
 - Issue tracker links: `"tracker": { "field": "linear", "url": ".../issue/{id}" }` in `.lean/config.json`. Cards and specs carry the issue id in that frontmatter field; lean keeps its own ids.

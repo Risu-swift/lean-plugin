@@ -16,7 +16,7 @@ Args: $ARGUMENTS
 
 ## Sequential (one card)
 
-1. Run `lean start T-NNN`. If it prints a `⚠ SECURITY` warning (a deploy card with no up-to-date security review), stop and ask with AskUserQuestion whether to run `/lean:secure` first. Read the card, and read `test` / `testFast` from `.lean/config.json`.
+1. Run `lean start T-NNN`. With `"sync": true` in config it runs `git pull` first; if the pull fails, show the error and stop. If it prints a `⚠ SECURITY` warning (a deploy card with no up-to-date security review), stop and ask with AskUserQuestion whether to run `/lean:secure` first. Read the card, and read `test` / `testFast` from `.lean/config.json`.
 2. If the card has `branch:`, earlier unfinished work exists. Run `git diff --stat HEAD...<branch>` and inspect the diff. Bring over what is sound (`git checkout <branch> -- <file>`) and use the rest as reference. It's untested, so don't trust it.
 3. `lean start` printed the notes most related to the card, each with its Apply line; the card's Watch section has the rest. Run `zk find <words>` only for a specific question those don't answer.
 4. Read only the card's files and what they directly need. Prefer Grep and LSP over reading big files whole. Don't re-read a file you just edited.
@@ -31,7 +31,7 @@ Args: $ARGUMENTS
    - If it prints `similar note exists`, Edit the file it names instead. If your note reverses that one, rerun with `--force`, then `zk supersede <old> <new>`.
    - Add `--global` for tool or framework lessons that aren't specific to this project.
 8. Run `lean done T-NNN --notes <ids>` before committing. It refuses unless the card's commits or your uncommitted changes include a test file; then add the missing tests (step 5). Only when tests truly aren't possible (e.g. pure config or docs), pass `--no-tests "<reason>"`. `HUMAN:` cards are exempt.
-9. Commit the card's files and `.lean/` together: `git add <files> .lean && git commit -m "<subject>"`, using the exact subject `lean done` printed (`T-NNN: <title>`, plus ` (<tracker id>)` when the card has one). One commit per card; no separate "mark done" commit.
+9. Commit the card's files and `.lean/` together: `git add <files> .lean && git commit -m "<subject>"`, using the exact subject `lean done` printed (`T-NNN: <title>`, plus ` (<tracker id>)` when the card has one). One commit per card; no separate "mark done" commit. If `lean done` ended with "then `lean sync`", run `lean sync` (pull, then push); on failure show the error and stop.
 10. Report in 5 lines or less: what changed, the test result, the notes, and the next ready card. Suggest `/clear` before the next card.
 
 ## Merging a worker's branch (Parallel and Phase)
@@ -43,7 +43,7 @@ Workers never touch `.lean/`, so the uncommitted card statuses from `lean start`
 3. Write the worker's proposed notes (Sequential step 7), then `lean done T-x --notes <ids>`.
 4. `git commit -m "<subject>"` with the subject `lean done` printed. The merge commit carries both the code and its `.lean/` record.
 
-After the last merge, run the full `lean test` once and fix any failure before doing anything else.
+After the last merge, run the full `lean test` once and fix any failure before doing anything else. Then, if `sync` is true in config, run `lean sync` once to push the merged cards.
 
 ## Parallel (--parallel T-a T-b ...)
 
