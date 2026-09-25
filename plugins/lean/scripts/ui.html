@@ -693,9 +693,11 @@ function linkify(html) {
         return part;
       }
       if (insideLink) return part;
+      const ids = (DATA && DATA.ids) || { task: ['T'], spec: ['S'] };
+      const idWord = (prefixes) => new RegExp(`\\b(?:${prefixes.join('|')})-\\d{3,}\\b`, 'g');
       return part
-        .replace(/\bT-\d{3,}\b/g, (m) => (DATA && cardById(m) ? `<a href="#card/${m}">${m}</a>` : m))
-        .replace(/\bS-\d{3,}\b/g, (m) => (DATA && DATA.specs.some((s) => s.id === m) ? `<a href="#specs/${m}">${m}</a>` : m))
+        .replace(idWord(ids.task), (m) => (DATA && cardById(m) ? `<a href="#card/${m}">${m}</a>` : m))
+        .replace(idWord(ids.spec), (m) => (DATA && DATA.specs.some((s) => s.id === m) ? `<a href="#specs/${m}">${m}</a>` : m))
         .replace(/\b\d{8}-\d{6}(?:-\d+)?\b/g, (m) => (DATA && noteById(m) ? `<a href="#notes/${m}">${m}</a>` : m));
     })
     .join('');

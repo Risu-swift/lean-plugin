@@ -18,6 +18,7 @@ import {
   buildReport,
   daysUntil,
   commitFor,
+  idPrefixes,
 } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -45,6 +46,7 @@ function snapshot() {
     deadlineLabel: cfg.deadlineLabel || cfg.deadline || null,
     days: cfg.deadline ? daysUntil(cfg.deadline) : null,
     lastTest: readJson(path.join(root, '.lean', 'last-test.json'), null),
+    ids: idPrefixes(root).accept,
     cards: cards.map((c) => ({
       id: c.id,
       title: c.data.title || '',

@@ -26,6 +26,8 @@ import {
   loadSpecs,
   researchOf,
   needsResearch,
+  idPrefixes,
+  idRe,
 } from './lib.mjs';
 
 const HELP = `lean — project state and task cards
@@ -34,7 +36,7 @@ const HELP = `lean — project state and task cards
   lean status                                  compact state (same as session start)
   lean tasks [--all]                           open cards: READY / wait / doing
   lean next                                    ready cards
-  lean new-id spec|task [--count n]            next S-/T- ids
+  lean new-id spec|task [--count n]            next S-/T- ids (other prefixes: "ids" in config.json)
   lean start T-NNN [T-NNN ...]                 mark cards doing (several for --parallel); one card also
                                                prints its top related notes
   lean notes T-NNN                             top related notes for a card (read-only; used by workers)
@@ -325,6 +327,7 @@ switch (cmd) {
         deadlineLabel: '',
         security: { paths: DEFAULT_SECURE_PATHS, ignore: [] },
         parallel: { maxAgents: 3, setup: '', portEnv: '' },
+        ids: { task: 'T', spec: 'S' },
       });
     }
     const ignore = path.join(L, '.gitignore');
@@ -364,20 +367,24 @@ switch (cmd) {
 
   case 'new-id': {
     const r = need();
-    const kinds = { spec: ['S', ['specs']], task: ['T', ['tasks', 'tasks/done']] };
-    const [prefix, dirs] = kinds[pos[0]] || die('usage: lean new-id spec|task [--count n]');
+    const kinds = { spec: ['specs'], task: ['tasks', 'tasks/done'] };
+    const dirs = kinds[pos[0]] || die('usage: lean new-id spec|task [--count n]');
+    const ids = idPrefixes(r);
+    const prefix = ids[pos[0]];
+    // Numbering carries on across a prefix rename: T-004 is followed by TASK-005, not TASK-001.
+    const re = idRe(ids.accept[pos[0]]);
     let max = 0;
     for (const d of dirs) {
       const p = path.join(r, '.lean', d);
       if (!fs.existsSync(p)) continue;
       for (const f of fs.readdirSync(p)) {
-        const m = f.match(new RegExp(`^${prefix}-(\\d+)`, 'i'));
-        if (m) max = Math.max(max, Number(m[1]));
+        const m = f.match(re);
+        if (m) max = Math.max(max, Number(m[0].match(/\d+$/)[0]));
       }
     }
     const count = Math.max(1, parseInt(opt.count || '1', 10));
-    const ids = Array.from({ length: count }, (_, i) => `${prefix}-${String(max + 1 + i).padStart(3, '0')}`);
-    console.log(ids.join('\n'));
+    const next = Array.from({ length: count }, (_, i) => `${prefix}-${String(max + 1 + i).padStart(3, '0')}`);
+    console.log(next.join('\n'));
     break;
   }
 
