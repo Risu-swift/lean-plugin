@@ -99,6 +99,20 @@ Task and spec ids default to `T-NNN` and `S-NNN`. To use your own, set `ids` in 
 
 `lean new-id` then prints `TASK-001` and `FEAT-001`. Prefixes are uppercased and must start with a letter (letters, digits, `_`); anything else falls back to the default. Cards and specs with the old `T-`/`S-` prefix are still read, and numbering carries on from them.
 
+## Issue tracker (Linear)
+
+lean keeps its own `T-`/`S-` numbering. To link cards and specs to issues in a tracker such as Linear, add `tracker` to `.lean/config.json`:
+
+```json
+"tracker": { "field": "linear", "url": "https://linear.app/<workspace>/issue/{id}", "team": "MED" }
+```
+
+- Each card and spec can then carry the issue id in that frontmatter field, e.g. `linear: MED-23`.
+- `lean tasks`, `lean next`, STATE, `lean report` and the dashboard show `T-014 · MED-23`; the report and dashboard link to `url`.
+- Commit subjects become `T-014: <title> (MED-23)`. `lean start`, `lean notes` and `lean done` print the exact subject. The id goes last so lean still finds the card's commit, and Linear links the commit by the id in its message.
+- When a Linear MCP tool is available, `/lean:grill` creates the spec's issue and `/lean:plan` creates one sub-issue per card, with `depends:` as "blocked by", then writes the ids back. `team` picks the Linear team (otherwise you are asked once). Without the tool the fields stay empty, with a warning.
+- Without `tracker`, lean behaves exactly as before.
+
 ## Layout
 
 ```

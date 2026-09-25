@@ -38,6 +38,35 @@ test('invalid id prefixes fall back to T and S', (t) => {
   assert.equal(p.lean('new-id', 'spec').out.trim(), 'S-001');
 });
 
+test('tracker ids show next to card ids and go last in the commit subject', (t) => {
+  const p = project(t);
+  p.config({ tracker: { field: 'linear', url: 'https://linear.app/acme/issue/{id}' } });
+  const f = p.card('T-014', { title: 'Login form', files: ['src/login.js', 'src/login.test.js'] });
+  fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('status: todo', 'linear: MED-23\nstatus: todo'));
+  p.card('T-015', { title: 'Logout' });
+  assert.match(p.lean('tasks').out, /T-014 · MED-23 READY Login form/);
+  assert.match(p.lean('next').out, /^T-014 · MED-23 Login form$/m);
+  assert.match(p.lean('next').out, /^T-015 Logout$/m);
+  assert.match(p.lean('notes', 'T-014').out, /commit as: "T-014: Login form \(MED-23\)"/);
+  assert.match(p.lean('start', 'T-014').out, /commit as: "T-014: Login form \(MED-23\)"/);
+  assert.match(p.lean('status').out, /now: T-014 · MED-23/);
+  assert.match(p.lean('report').out, /\*\*T-014\*\* · \[MED-23\]\(https:\/\/linear\.app\/acme\/issue\/MED-23\) Login form/);
+  p.write('src/login.js', 'export {};\n');
+  p.write('src/login.test.js', '// test\n');
+  assert.match(p.lean('done', 'T-014').out, /as "T-014: Login form \(MED-23\)"/);
+  // The ref goes after the id, so lean still finds the commit by its "T-NNN:" subject.
+  const sha = p.commit('T-014: Login form (MED-23)');
+  assert.match(p.lean('status').out, new RegExp(`T-014 · MED-23 Login form @${sha}`));
+});
+
+test('without a tracker, cards show and commit exactly as before', (t) => {
+  const p = project(t);
+  const f = p.card('T-001', { title: 'Plain' });
+  fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace('status: todo', 'linear: MED-9\nstatus: todo'));
+  assert.match(p.lean('next').out, /^T-001 Plain$/m);
+  assert.match(p.lean('start', 'T-001').out, /commit as: "T-001: Plain"/);
+});
+
 test('next lists only cards whose dependencies are done', (t) => {
   const p = project(t);
   p.card('T-001', { done: true });

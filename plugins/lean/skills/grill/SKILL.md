@@ -53,5 +53,6 @@ Ask one AskUserQuestion: summarize the settled design in 8 lines or less, plus a
   ```
 
 - For each decision that is non-obvious or costly to reverse, run `zk new --type decision --title "<the decision as a claim>" --tags a,b --source S-NNN --body "Why: ...\nApply: ..."`. Put the note id next to the decision in the spec. Aim for 2–8 notes, not one per question. If `zk new` prints `similar note exists`, cite that note's id instead of creating one; when the decision reverses it, rerun with `--force`, then `zk supersede <old> <new>`.
+- If `.lean/config.json` has `tracker` and a matching MCP tool is available (e.g. Linear's create/save issue), create one issue for the spec: title = the spec title, description = Problem + Acceptance, team = `tracker.team` if set, otherwise ask once. Write the returned id back into the spec's frontmatter under `tracker.field` (e.g. `linear: MED-23`). If the tool is missing or fails, leave the field out and say so in the report; never block the spec on it.
 - Run `lean focus "S-NNN agreed, next: /lean:plan S-NNN"` (or `"S-NNN needs research, next: /lean:research S-NNN"`). This is a temporary note; the focus line itself updates automatically from the cards.
 - Report in 3 lines: the spec path, the notes created, and the next step: `/lean:research S-NNN` if there are research questions, otherwise `/lean:plan S-NNN`.

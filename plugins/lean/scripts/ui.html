@@ -151,6 +151,8 @@ let showCardsInGraph = false;
 const noteFilter = { q: '', type: '', scope: '', tag: '' };
 
 const cardById = (id) => DATA.cards.find((c) => c.id === id);
+// A card's or spec's tracker issue (e.g. Linear), linked when the tracker has a url.
+const refLink = (x) => (!x.ref ? '' : x.refUrl ? ` · <a href="${esc(x.refUrl)}" target="_blank" rel="noopener">${esc(x.ref)} ↗</a>` : ` · ${esc(x.ref)}`);
 const noteById = (id) => DATA.notes.find((n) => n.id === id);
 
 // ---------- data + routing ----------
@@ -270,6 +272,7 @@ function boardHTML() {
 function tileHTML(c) {
   const meta = [];
   if (c.title.startsWith('HUMAN:')) meta.push('<span class="tag human">human</span>');
+  if (c.ref) meta.push(`<span class="tag">${esc(c.ref)}</span>`);
   if (c.tdd) meta.push(`<span class="tag">${esc(c.tdd)}</span>`);
   if (c.branch) meta.push(`<span class="tag" title="${esc(c.branch)}">⎇ wip</span>`);
   if (c.status === 'wait') {
@@ -296,7 +299,7 @@ function renderDrawer() {
   el.hidden = false;
   el.innerHTML = `<div class="drawer-in">
     <button class="x" data-close aria-label="Close">✕</button>
-    <div class="muted">${esc(c.id)} · <span class="status s-${c.status}">${c.status}</span>${c.spec ? ` · <a href="#specs/${esc(c.spec)}">${esc(c.spec)}</a>` : ''}</div>
+    <div class="muted">${esc(c.id)}${refLink(c)} · <span class="status s-${c.status}">${c.status}</span>${c.spec ? ` · <a href="#specs/${esc(c.spec)}">${esc(c.spec)}</a>` : ''}</div>
     <h2>${esc(c.title)}</h2>
     <dl>
       <dt>Needs</dt><dd>${cardChips(c.depends)}</dd>
@@ -445,7 +448,7 @@ function specDetailHTML(s) {
       return `<tr><td><b>${esc(a.id)}</b></td><td>${linkify(inline(esc(a.text)))}</td><td>${cardChips(a.cards.map((c) => c.id))}</td><td class="${cls}" style="white-space:nowrap">${label}</td></tr>`;
     })
     .join('');
-  return `<div class="muted">${esc(s.id)} · ${esc(s.status)} · ${done}/${cards.length} cards done · <code>${esc(s.file)}</code></div>
+  return `<div class="muted">${esc(s.id)}${refLink(s)} · ${esc(s.status)} · ${done}/${cards.length} cards done · <code>${esc(s.file)}</code></div>
     <h2>${esc(s.title)}</h2>
     ${rows ? `<h3>Acceptance coverage</h3><div class="tbl"><table><thead><tr><th></th><th>Criterion</th><th>Cards</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table></div>` : ''}
     <h3>Cards</h3><div>${cardChips(cards.map((c) => c.id))}</div>

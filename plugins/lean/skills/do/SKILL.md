@@ -31,7 +31,7 @@ Args: $ARGUMENTS
    - If it prints `similar note exists`, Edit the file it names instead. If your note reverses that one, rerun with `--force`, then `zk supersede <old> <new>`.
    - Add `--global` for tool or framework lessons that aren't specific to this project.
 8. Run `lean done T-NNN --notes <ids>` before committing. It refuses unless the card's commits or your uncommitted changes include a test file; then add the missing tests (step 5). Only when tests truly aren't possible (e.g. pure config or docs), pass `--no-tests "<reason>"`. `HUMAN:` cards are exempt.
-9. Commit the card's files and `.lean/` together: `git add <files> .lean && git commit -m "T-NNN: <title>"`. One commit per card; no separate "mark done" commit.
+9. Commit the card's files and `.lean/` together: `git add <files> .lean && git commit -m "<subject>"`, using the exact subject `lean done` printed (`T-NNN: <title>`, plus ` (<tracker id>)` when the card has one). One commit per card; no separate "mark done" commit.
 10. Report in 5 lines or less: what changed, the test result, the notes, and the next ready card. Suggest `/clear` before the next card.
 
 ## Merging a worker's branch (Parallel and Phase)
@@ -41,7 +41,7 @@ Workers never touch `.lean/`, so the uncommitted card statuses from `lean start`
 1. `git merge --no-ff --no-commit <branch>`. On a conflict you can't fix trivially: `git merge --abort`, then `lean reset T-x` (it records the branch on the card) and move on.
 2. `lean test --fast`. If it fails and the fix isn't trivial: `git merge --abort`, `lean reset T-x`, move on.
 3. Write the worker's proposed notes (Sequential step 7), then `lean done T-x --notes <ids>`.
-4. `git commit -m "T-x: <title>"`. The merge commit carries both the code and its `.lean/` record.
+4. `git commit -m "<subject>"` with the subject `lean done` printed. The merge commit carries both the code and its `.lean/` record.
 
 After the last merge, run the full `lean test` once and fix any failure before doing anything else.
 
