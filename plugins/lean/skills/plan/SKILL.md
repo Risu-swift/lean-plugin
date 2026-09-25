@@ -59,13 +59,14 @@ tdd: strict
 - ... (zk 20260914-153012)
 ```
 
-Keep frontmatter lists inline (`[a, b]`). Add `branch: <name>` only when earlier unfinished work exists on a branch.
+When a tracker is set, the card also gets `<tracker.field>: <issue id>` in its frontmatter (step 4 fills it). Keep frontmatter lists inline (`[a, b]`). Add `branch: <name>` only when earlier unfinished work exists on a branch.
 
 ## 4. Check the plan
 
 1. Every acceptance id in the spec must appear in at least one card's "Done when". Fix any gaps.
 2. Run `lean check-plan S-NNN`. For each suggestion, either merge the cards (combine Goal, Steps, Done when and `files:`; union `depends:`; delete the merged-away card file; point other cards' `depends:` at the survivor) or keep it with a one-line reason. Re-run until only justified suggestions remain.
 3. Add a `## Cards` section listing the T-ids to the spec.
+4. Tracker: if `.lean/config.json` has `tracker` and a matching MCP tool is available (e.g. Linear), create one issue per card as a sub-issue of the spec's issue (the spec's `tracker.field` value; same team). Title = card title, description = Goal + Done when. Then set "blocked by" from each card's `depends:`. Write each returned id into the card's frontmatter under `tracker.field` (e.g. `linear: MED-24`). If the spec has no issue, or the tool is missing or fails, leave the field out and say so in the report; never block the plan on it.
 
 ## 5. Finish
 

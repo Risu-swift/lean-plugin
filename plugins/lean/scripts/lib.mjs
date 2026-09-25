@@ -110,8 +110,27 @@ export function idPrefixes(root) {
 // An id at the start of a file name, e.g. `T-001` in `T-001-login.md`.
 export const idRe = (prefixes) => new RegExp(`^(?:${prefixes.join('|')})-\\d+`, 'i');
 
+// Optional issue tracker (e.g. Linear): `tracker.field` is the frontmatter field holding the issue id, and
+// `tracker.url` links it, with `{id}` replaced. Without a tracker, cards and specs have no ref.
+export function trackerOf(root) {
+  const t = readJson(path.join(root, '.lean', 'config.json'), {}).tracker || {};
+  if (!/^[a-z][\w-]*$/i.test(String(t.field || ''))) return null;
+  const url = typeof t.url === 'string' && /^https?:\/\/.*\{id\}/.test(t.url) ? t.url : null;
+  return { field: t.field, url };
+}
+
+const refOf = (tracker, data) => (tracker && String(data[tracker.field] ?? '').trim()) || null;
+export const refUrl = (tracker, ref) => (tracker?.url && ref ? tracker.url.replace('{id}', encodeURIComponent(ref)) : null);
+
+// `T-014 · MED-23` when the card has a tracker ref, else `T-014`.
+export const tagOf = (x) => (x.ref ? `${x.id} · ${x.ref}` : x.id);
+
+// The card's commit subject. The ref goes last so the subject still starts with "T-NNN:" (commitFor relies on it).
+export const commitSubject = (c) => `${c.id}: ${c.data.title || ''}${c.ref ? ` (${c.ref})` : ''}`;
+
 export function loadCards(root) {
   const re = idRe(idPrefixes(root).accept.task);
+  const tracker = trackerOf(root);
   const cards = [];
   for (const [sub, inDone] of [['tasks', false], [path.join('tasks', 'done'), true]]) {
     const dir = path.join(root, '.lean', sub);
@@ -121,7 +140,7 @@ export function loadCards(root) {
       const file = path.join(dir, f);
       const { data, body } = parseNote(fs.readFileSync(file, 'utf8'));
       const id = String(data.id || f.match(re)[0]).toUpperCase();
-      cards.push({ id, file, data, body, done: inDone || data.status === 'done' });
+      cards.push({ id, ref: refOf(tracker, data), file, data, body, done: inDone || data.status === 'done' });
     }
   }
   return cards.sort((a, b) => num(a.id) - num(b.id));
@@ -152,8 +171,8 @@ export function focusLine(root, cards = loadCards(root)) {
   const parts = [specId ? `${specId} ${specTitle || ''}`.trim() : 'All cards'];
   parts.push(`${inScope.filter((c) => c.done).length}/${inScope.length} done`);
   if (!open.length) parts.push('all cards done — next: /lean:review, then /lean:grill the next phase');
-  else if (doing.length) parts.push(`now: ${doing.map((c) => c.id).join(', ')}`);
-  else if (ready.length) parts.push(`next: ${ready[0].id} ${ready[0].data.title || ''}`.trim());
+  else if (doing.length) parts.push(`now: ${doing.map(tagOf).join(', ')}`);
+  else if (ready.length) parts.push(`next: ${tagOf(ready[0])} ${ready[0].data.title || ''}`.trim());
   else parts.push('open cards are waiting on dependencies');
   return parts.join(' · ');
 }
@@ -165,7 +184,7 @@ export function render(root) {
   const doing = open.filter((c) => c.data.status === 'doing');
   const ready = readyCards(cards);
   const waiting = open.length - doing.length - ready.length;
-  const label = (c) => `${c.id} ${c.data.title || ''}`.trim();
+  const label = (c) => `${tagOf(c)} ${c.data.title || ''}`.trim();
 
   const out = [`# STATE — ${st.project || path.basename(root)}`];
   out.push(`Focus: ${focusLine(root, cards)}`);
@@ -190,7 +209,7 @@ export function render(root) {
       const sha = r.commit || commitFor(root, r.id);
       const commit = sha ? ` @${sha}` : '';
       const notes = r.notes?.length ? ` zk:${r.notes.join(',')}` : '';
-      out.push(`  - ${r.date} ${r.id} ${r.title || ''}${commit}${notes}`);
+      out.push(`  - ${r.date} ${tagOf(r)} ${r.title || ''}${commit}${notes}`);
     }
   }
   if (st.reviewed) out.push(`Last review: ${st.reviewed}`);
@@ -355,13 +374,14 @@ export function loadSpecs(root) {
   const dir = path.join(root, '.lean', 'specs');
   if (!fs.existsSync(dir)) return [];
   const re = idRe(idPrefixes(root).accept.spec);
+  const tracker = trackerOf(root);
   return fs
     .readdirSync(dir)
     .filter((f) => re.test(f) && /\.md$/i.test(f))
     .map((f) => {
       const file = path.join(dir, f);
       const { data, body } = parseNote(fs.readFileSync(file, 'utf8'));
-      return { id: String(data.id || f.match(re)[0]).toUpperCase(), file, data, body };
+      return { id: String(data.id || f.match(re)[0]).toUpperCase(), ref: refOf(tracker, data), file, data, body };
     })
     .sort((a, b) => num(a.id) - num(b.id));
 }
@@ -396,7 +416,12 @@ export function buildReport(root, since = new Date(Date.now() - 7 * 864e5).toLoc
   const waiting = cards.length - done.length - doing.length - ready.length;
   const pct = cards.length ? Math.round((done.length / cards.length) * 100) : 0;
   const days = cfg.deadline ? daysUntil(cfg.deadline) : null;
-  const row = (c) => `- **${c.id}** ${c.data.title || ''}`;
+  const tracker = trackerOf(root);
+  const ref = (c) => {
+    const url = refUrl(tracker, c.ref);
+    return c.ref ? ` · ${url ? `[${c.ref}](${url})` : c.ref}` : '';
+  };
+  const row = (c) => `- **${c.id}**${ref(c)} ${c.data.title || ''}`;
   const section = (title, items) => ['', `## ${title}`, ...(items.length ? items : ['- none'])];
 
   return [

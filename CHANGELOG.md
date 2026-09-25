@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.11.0 — 2026-09-25
+
+- Issue tracker links: `"tracker": { "field": "linear", "url": ".../issue/{id}" }` in `.lean/config.json`. Cards and specs carry the issue id in that frontmatter field; lean keeps its own ids.
+- `lean tasks`, `lean next`, STATE, the focus line, `lean report` and the dashboard show `T-014 · MED-23`; the report and dashboard link to the issue.
+- Commit subject is `T-014: <title> (MED-23)`. `lean start`, `lean notes` (for workers) and `lean done` print it; `/lean:do` and workers use it as printed.
+- `/lean:grill` and `/lean:plan` create the spec issue and card sub-issues (depends → blocked by) through a Linear MCP tool when available, and write the ids back; otherwise they leave the field empty and warn.
+- No `tracker` set: behavior is unchanged.
+
 ## 0.10.0 — 2026-09-25
 
 - Custom id prefixes: set `"ids": { "task": "TASK", "spec": "FEAT" }` in `.lean/config.json` and `lean new-id` prints `TASK-001` / `FEAT-001`. Defaults stay `T` and `S`; `lean init` writes them to the config.

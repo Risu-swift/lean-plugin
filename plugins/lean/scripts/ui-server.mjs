@@ -19,6 +19,8 @@ import {
   daysUntil,
   commitFor,
   idPrefixes,
+  trackerOf,
+  refUrl,
 } from './lib.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -35,6 +37,7 @@ function snapshot() {
   const st = readJson(path.join(root, '.lean', 'state.json'), {});
   const cfg = readJson(path.join(root, '.lean', 'config.json'), {});
   const cards = loadCards(root);
+  const tracker = trackerOf(root);
   const ready = new Set(readyCards(cards).map((c) => c.id));
   return {
     project: st.project || path.basename(root),
@@ -49,6 +52,8 @@ function snapshot() {
     ids: idPrefixes(root).accept,
     cards: cards.map((c) => ({
       id: c.id,
+      ref: c.ref,
+      refUrl: refUrl(tracker, c.ref),
       title: c.data.title || '',
       status: c.done ? 'done' : c.data.status === 'doing' ? 'doing' : ready.has(c.id) ? 'ready' : 'wait',
       spec: c.data.spec ? String(c.data.spec).toUpperCase() : null,
@@ -63,6 +68,8 @@ function snapshot() {
     })),
     specs: loadSpecs(root).map((s) => ({
       id: s.id,
+      ref: s.ref,
+      refUrl: refUrl(tracker, s.ref),
       title: s.data.title || '',
       status: s.data.status || '',
       file: rel(s.file),

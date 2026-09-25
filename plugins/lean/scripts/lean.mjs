@@ -28,6 +28,8 @@ import {
   needsResearch,
   idPrefixes,
   idRe,
+  tagOf,
+  commitSubject,
 } from './lib.mjs';
 
 const HELP = `lean — project state and task cards
@@ -37,9 +39,10 @@ const HELP = `lean — project state and task cards
   lean tasks [--all]                           open cards: READY / wait / doing
   lean next                                    ready cards
   lean new-id spec|task [--count n]            next S-/T- ids (other prefixes: "ids" in config.json)
-  lean start T-NNN [T-NNN ...]                 mark cards doing (several for --parallel); one card also
-                                               prints its top related notes
-  lean notes T-NNN                             top related notes for a card (read-only; used by workers)
+  lean start T-NNN [T-NNN ...]                 mark cards doing (several for --parallel) and print each
+                                               commit subject; one card also prints its top related notes
+  lean notes T-NNN                             commit subject and top related notes for a card
+                                               (read-only; used by workers)
   lean reset T-NNN [T-NNN ...]                 put cards back to todo (abandoned or failed); an unmerged
                                                worker branch is recorded on the card as branch:
   lean done T-NNN [--commit sha] [--notes id,id] [--no-tests "<why>"]
@@ -351,7 +354,7 @@ switch (cmd) {
       const s = c.done ? 'done' : c.data.status === 'doing' ? 'doing' : ready.has(c.id) ? 'READY' : 'wait';
       const deps = list(c.data.depends);
       console.log(
-        `${c.id.padEnd(6)} ${s.padEnd(5)} ${c.data.title || ''}${deps.length ? `  deps:${deps.join(',')}` : ''}`
+        `${tagOf(c).padEnd(6)} ${s.padEnd(5)} ${c.data.title || ''}${deps.length ? `  deps:${deps.join(',')}` : ''}`
       );
       shown++;
     }
@@ -361,7 +364,7 @@ switch (cmd) {
 
   case 'next': {
     const ready = readyCards(loadCards(need()));
-    console.log(ready.length ? ready.map((c) => `${c.id} ${c.data.title || ''}`).join('\n') : 'no ready cards');
+    console.log(ready.length ? ready.map((c) => `${tagOf(c)} ${c.data.title || ''}`).join('\n') : 'no ready cards');
     break;
   }
 
@@ -411,7 +414,8 @@ switch (cmd) {
       return c;
     });
     writeState(r);
-    console.log(`${cmd === 'start' ? 'started' : 'reset to todo'}: ${changed.map((c) => c.id).join(', ')}`);
+    console.log(`${cmd === 'start' ? 'started' : 'reset to todo'}: ${changed.map(tagOf).join(', ')}`);
+    if (cmd === 'start') for (const c of changed) console.log(`commit as: "${commitSubject(c)}"`);
     if (kept.length) console.log(`unmerged work kept on its branch (recorded as branch: on the card): ${kept.join(', ')}`);
     // Parallel workers look up their own notes with `lean notes`.
     if (cmd === 'start' && changed.length === 1) printCardNotes(r, changed[0], { quiet: true });
@@ -453,13 +457,13 @@ switch (cmd) {
     fs.mkdirSync(path.dirname(dest), { recursive: true });
     saveCard(c, dest);
     mutate(r, (st) => {
-      const entry = { date: today(), id: c.id, title: c.data.title, commit: opt.commit, notes: list(opt.notes) };
+      const entry = { date: today(), id: c.id, ref: c.ref || undefined, title: c.data.title, commit: opt.commit, notes: list(opt.notes) };
       st.recent = [entry, ...(st.recent || [])].slice(0, 10);
       delete st.note;
     });
     const next = readyCards(loadCards(r)).map((n) => n.id);
-    console.log(`done ${c.id}. ready: ${next.join(', ') || 'none'}`);
-    if (gitC(r, 'status --porcelain')) console.log(`next: commit the work and .lean/ together as "${c.id}: ${c.data.title || ''}"`);
+    console.log(`done ${tagOf(c)}. ready: ${next.join(', ') || 'none'}`);
+    if (gitC(r, 'status --porcelain')) console.log(`next: commit the work and .lean/ together as "${commitSubject(c)}"`);
 
     const removed = cleanMergedWorktrees(r);
     if (removed.length) console.log(`removed merged worker worktrees: ${removed.join(', ')}`);
@@ -802,7 +806,9 @@ switch (cmd) {
 
   case 'notes': {
     const r = need();
-    printCardNotes(r, card(r, pos[0]));
+    const c = card(r, pos[0]);
+    console.log(`commit as: "${commitSubject(c)}"`);
+    printCardNotes(r, c);
     break;
   }
 
