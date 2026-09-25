@@ -37,7 +37,7 @@ Goal: the phase can finish in one sitting with `/lean:do --phase`. That takes fe
 
 ## 3. Write cards
 
-Run `lean new-id task --count <n>`. Write each card to `.lean/tasks/T-NNN-<slug>.md`, 60 lines or less:
+Run `lean new-id task --count <n>` and use the ids it prints (`T-` is the default prefix; `ids` in `.lean/config.json` can change it). Write each card to `.lean/tasks/T-NNN-<slug>.md`, 60 lines or less:
 
 ```
 ---

@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.10.0 — 2026-09-25
+
+- Custom id prefixes: set `"ids": { "task": "TASK", "spec": "FEAT" }` in `.lean/config.json` and `lean new-id` prints `TASK-001` / `FEAT-001`. Defaults stay `T` and `S`; `lean init` writes them to the config.
+- Cards and specs are found by the configured prefix plus the defaults, so existing `T-`/`S-` files keep working after a rename, and numbering carries on from them.
+- The dashboard links ids with the configured prefixes; `/lean:grill` and `/lean:plan` use whatever `lean new-id` prints.
+
 ## 0.9.0 — 2026-09-19
 
 - Optional research phase between grill and plan, for facts neither the user nor the code can give (library abilities, hardware and drivers, service limits, speed).

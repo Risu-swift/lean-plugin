@@ -34,7 +34,7 @@ Ask one AskUserQuestion: summarize the settled design in 8 lines or less, plus a
 
 ## 3. Write
 
-- Run `lean new-id spec` to get `S-NNN`. Give the spec a plain-language title a client would understand, such as "Voting engine that never miscounts". Write `.lean/specs/S-NNN-<slug>.md`, 150 lines or less:
+- Run `lean new-id spec` to get `S-NNN` (`S` is the default prefix; a project can set its own under `ids` in `.lean/config.json`, so use the id it prints). Give the spec a plain-language title a client would understand, such as "Voting engine that never miscounts". Write `.lean/specs/S-NNN-<slug>.md`, 150 lines or less:
 
   ```
   ---

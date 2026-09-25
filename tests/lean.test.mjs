@@ -12,6 +12,32 @@ test('new-id continues after open and done cards', (t) => {
   assert.equal(p.lean('new-id', 'spec').out.trim(), 'S-001');
 });
 
+test('custom id prefixes from config are used for new ids, cards and specs', (t) => {
+  const p = project(t);
+  assert.deepEqual(JSON.parse(p.read('.lean/config.json')).ids, { task: 'T', spec: 'S' });
+  p.config({ ids: { task: 'task', spec: 'Feat' } });
+  p.card('T-004', { done: true });
+  // Numbering carries on from the old prefix, and old cards stay visible.
+  assert.equal(p.lean('new-id', 'task', '--count', '2').out.trim(), 'TASK-005\nTASK-006');
+  assert.equal(p.lean('new-id', 'spec').out.trim(), 'FEAT-001');
+  p.write('.lean/specs/FEAT-001-demo.md', '---\nid: FEAT-001\ntitle: Demo\nstatus: agreed\n---\n## Problem\nx\n');
+  p.card('TASK-005', { spec: 'FEAT-001', depends: ['T-004'] });
+  p.card('TASK-006', { spec: 'FEAT-001', depends: ['TASK-005'] });
+  const next = p.lean('next').out;
+  assert.match(next, /TASK-005/);
+  assert.doesNotMatch(next, /TASK-006/);
+  assert.equal(p.lean('start', 'task-005').code, 0);
+  assert.match(p.lean('status').out, /FEAT-001 Demo/);
+  assert.match(p.lean('tasks', '--all').out, /T-004/);
+});
+
+test('invalid id prefixes fall back to T and S', (t) => {
+  const p = project(t);
+  p.config({ ids: { task: '1-bad', spec: '' } });
+  assert.equal(p.lean('new-id', 'task').out.trim(), 'T-001');
+  assert.equal(p.lean('new-id', 'spec').out.trim(), 'S-001');
+});
+
 test('next lists only cards whose dependencies are done', (t) => {
   const p = project(t);
   p.card('T-001', { done: true });

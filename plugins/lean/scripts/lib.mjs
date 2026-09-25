@@ -89,18 +89,38 @@ export function readJson(file, fallback) {
 
 export const writeJson = (file, value) => fs.writeFileSync(file, JSON.stringify(value, null, 2) + '\n');
 
-const num = (id) => parseInt(String(id).replace(/\D/g, ''), 10) || 0;
+// Trailing digits only, so a prefix with digits in it (`V2-003`) still sorts by number.
+const num = (id) => parseInt(String(id).match(/(\d+)$/)?.[1] || '', 10) || 0;
+
+const DEFAULT_IDS = { task: 'T', spec: 'S' };
+const cleanPrefix = (v, d) => {
+  const s = String(v || '').trim().toUpperCase();
+  return /^[A-Z][A-Z0-9_]*$/.test(s) ? s : d;
+};
+
+// Task and spec id prefixes from `ids` in .lean/config.json (default T and S). New ids use `task`/`spec`;
+// `accept` also keeps the defaults so cards made before a rename are still found.
+export function idPrefixes(root) {
+  const ids = readJson(path.join(root, '.lean', 'config.json'), {}).ids || {};
+  const task = cleanPrefix(ids.task, DEFAULT_IDS.task);
+  const spec = cleanPrefix(ids.spec, DEFAULT_IDS.spec);
+  return { task, spec, accept: { task: [...new Set([task, 'T'])], spec: [...new Set([spec, 'S'])] } };
+}
+
+// An id at the start of a file name, e.g. `T-001` in `T-001-login.md`.
+export const idRe = (prefixes) => new RegExp(`^(?:${prefixes.join('|')})-\\d+`, 'i');
 
 export function loadCards(root) {
+  const re = idRe(idPrefixes(root).accept.task);
   const cards = [];
   for (const [sub, inDone] of [['tasks', false], [path.join('tasks', 'done'), true]]) {
     const dir = path.join(root, '.lean', sub);
     if (!fs.existsSync(dir)) continue;
     for (const f of fs.readdirSync(dir)) {
-      if (!/^T-\d+.*\.md$/i.test(f)) continue;
+      if (!re.test(f) || !/\.md$/i.test(f)) continue;
       const file = path.join(dir, f);
       const { data, body } = parseNote(fs.readFileSync(file, 'utf8'));
-      const id = String(data.id || f.match(/^T-\d+/i)[0]).toUpperCase();
+      const id = String(data.id || f.match(re)[0]).toUpperCase();
       cards.push({ id, file, data, body, done: inDone || data.status === 'done' });
     }
   }
@@ -334,13 +354,14 @@ export function applyLine(n, max = 160) {
 export function loadSpecs(root) {
   const dir = path.join(root, '.lean', 'specs');
   if (!fs.existsSync(dir)) return [];
+  const re = idRe(idPrefixes(root).accept.spec);
   return fs
     .readdirSync(dir)
-    .filter((f) => /^S-\d+.*\.md$/i.test(f))
+    .filter((f) => re.test(f) && /\.md$/i.test(f))
     .map((f) => {
       const file = path.join(dir, f);
       const { data, body } = parseNote(fs.readFileSync(file, 'utf8'));
-      return { id: String(data.id || f.match(/^S-\d+/i)[0]).toUpperCase(), file, data, body };
+      return { id: String(data.id || f.match(re)[0]).toUpperCase(), file, data, body };
     })
     .sort((a, b) => num(a.id) - num(b.id));
 }
