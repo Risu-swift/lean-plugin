@@ -89,6 +89,10 @@ Recommended user setting for `--parallel`: `"worktree": { "baseRef": "head" }`. 
 
 `npm test` (Node 22+, no dependencies) runs the CLI tests in throwaway git repos. After editing, run `claude plugin marketplace update lean` and update the plugin so the cache picks up the change. Record changes in [CHANGELOG.md](CHANGELOG.md) and bump the version in both `plugin.json` and `marketplace.json`.
 
+## Git sync per card
+
+To pull when a card starts and push when it ends, set `"sync": true` in `.lean/config.json`. `lean start` then runs `git pull --rebase=merges --autostash` first and stops if the pull fails. After each card commit, `/lean:do` runs `lean sync` (pull, then push); parallel and phase runs push once per wave. A branch with no upstream is skipped with a hint. `lean sync` also works by hand.
+
 ## Id prefixes
 
 Task and spec ids default to `T-NNN` and `S-NNN`. To use your own, set `ids` in `.lean/config.json`:

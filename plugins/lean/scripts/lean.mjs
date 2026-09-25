@@ -67,6 +67,9 @@ const HELP = `lean — project state and task cards
   lean ui [--port n] [--no-open] | lean ui --stop    local read-only dashboard
   lean focus [note]                            pin a note under the automatic focus line
                                                (cleared by the next lean done; no text clears it)
+  lean sync                                    git pull --rebase, then git push, on the current branch;
+                                               with "sync": true in config.json, lean start pulls first
+                                               and /lean:do runs this after each card commit
   lean block <text> | unblock <n> | reviewed [sha]`;
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -312,6 +315,41 @@ function printCardNotes(r, c, { quiet = false } = {}) {
   }
 }
 
+// Pull (rebasing local commits, keeping merges, stashing .lean/ edits), then optionally push.
+// No upstream (new branch, detached HEAD) skips with a hint. Returns false on failure.
+function syncGit(r, { push }) {
+  const run = (...args) => spawnSync('git', ['-C', r, ...args], { encoding: 'utf8' });
+  const up = run('rev-parse', '--abbrev-ref', '--symbolic-full-name', '@{u}');
+  if (up.status !== 0) {
+    console.log('sync: no upstream branch, skipped (set one with `git push -u origin <branch>`)');
+    return true;
+  }
+  const upstream = up.stdout.trim();
+  const before = gitC(r, 'rev-parse HEAD');
+  const pull = run('pull', '--rebase=merges', '--autostash', '--quiet');
+  if (pull.status !== 0) {
+    console.error(`lean: git pull from ${upstream} failed:
+${(pull.stderr || pull.stdout).trim()}`);
+    if (fs.existsSync(path.join(r, '.git', 'rebase-merge')) || fs.existsSync(path.join(r, '.git', 'rebase-apply'))) {
+      console.error('lean: resolve the conflicts, then `git rebase --continue` (or `git rebase --abort`) and rerun');
+    }
+    return false;
+  }
+  const pulled = before === gitC(r, 'rev-parse HEAD') ? 'up to date' : `pulled ${splitLines(gitC(r, `log --oneline ${before}..HEAD`)).length} commit(s)`;
+  console.log(`sync: ${upstream} ${pulled}`);
+  if (!push) return true;
+  const ahead = Number(gitC(r, 'rev-list --count @{u}..HEAD') || 0);
+  if (!ahead) return true;
+  const res = run('push', '--quiet');
+  if (res.status !== 0) {
+    console.error(`lean: git push to ${upstream} failed:
+${(res.stderr || res.stdout).trim()}`);
+    return false;
+  }
+  console.log(`sync: pushed ${ahead} commit(s) to ${upstream}`);
+  return true;
+}
+
 switch (cmd) {
   case 'init': {
     const r = git('rev-parse --show-toplevel') || process.cwd();
@@ -331,6 +369,7 @@ switch (cmd) {
         security: { paths: DEFAULT_SECURE_PATHS, ignore: [] },
         parallel: { maxAgents: 3, setup: '', portEnv: '' },
         ids: { task: 'T', spec: 'S' },
+        sync: false,
       });
     }
     const ignore = path.join(L, '.gitignore');
@@ -395,6 +434,7 @@ switch (cmd) {
   case 'reset': {
     const r = need();
     if (!pos.length) die(`usage: lean ${cmd} T-NNN [T-NNN ...]`);
+    if (cmd === 'start' && configOf(r).sync === true && !syncGit(r, { push: false })) process.exit(1);
     const status = cmd === 'start' ? 'doing' : 'todo';
     const unmerged = cmd === 'reset' ? workerWorktrees(r).filter((w) => w.branch && w.own && !w.merged) : [];
     const kept = [];
@@ -463,10 +503,18 @@ switch (cmd) {
     });
     const next = readyCards(loadCards(r)).map((n) => n.id);
     console.log(`done ${tagOf(c)}. ready: ${next.join(', ') || 'none'}`);
-    if (gitC(r, 'status --porcelain')) console.log(`next: commit the work and .lean/ together as "${commitSubject(c)}"`);
+    if (gitC(r, 'status --porcelain')) {
+      const then = configOf(r).sync === true ? ', then `lean sync`' : '';
+      console.log(`next: commit the work and .lean/ together as "${commitSubject(c)}"${then}`);
+    }
 
     const removed = cleanMergedWorktrees(r);
     if (removed.length) console.log(`removed merged worker worktrees: ${removed.join(', ')}`);
+    break;
+  }
+
+  case 'sync': {
+    if (!syncGit(need(), { push: true })) process.exit(1);
     break;
   }
 
